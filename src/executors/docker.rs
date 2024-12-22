@@ -1,13 +1,11 @@
-use std::{collections::HashMap, env, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use crate::{
     job::{DockerJob, EnvVars, Job},
     network::PortManager,
+    settings::SETTINGS,
 };
-use futures::{
-    future,
-    stream::{self, StreamExt},
-};
+use futures::{future, stream::StreamExt};
 use log::info;
 use serde_json::Value;
 
@@ -20,7 +18,7 @@ use bollard::{
         StartContainerOptions, StopContainerOptions, WaitContainerOptions,
     },
     image::{CreateImageOptions, ListImagesOptions},
-    network::{self, CreateNetworkOptions},
+    network::CreateNetworkOptions,
     secret::{ContainerCreateResponse, ContainerInspectResponse, HealthStatusEnum, PortBinding},
     Docker,
 };
@@ -260,6 +258,7 @@ impl DockerExecutor {
         // Start container
         self.start_container(&container_name).await?;
         // Wait for container to become healthy
+        let container_timeout = (&*SETTINGS).docker.container_timeout;
         let mut ms_ellapsed = 0;
         let health_status: HealthStatusEnum = loop {
             let container_inspect_response = self.inspect_container(&container_name).await?;
@@ -276,7 +275,7 @@ impl DockerExecutor {
                 info!("Waiting for container {} to start...", container_name);
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 ms_ellapsed += 500;
-                if ms_ellapsed == 10000 {
+                if ms_ellapsed >= container_timeout {
                     break health_status;
                 }
             } else {
@@ -287,6 +286,7 @@ impl DockerExecutor {
         match health_status {
             HealthStatusEnum::HEALTHY => {
                 info!("Container {} is healthy!", container_name);
+                // TODO: Add headers from job
                 let resp = self
                     .http_client
                     .post("https://httpbin.org/post")

@@ -8,7 +8,7 @@ use anyhow::Result;
 use executors::{DockerExecutor, Executor};
 use job::{DockerJob, DockerJobHTTPMethod, Job};
 use serde_json::json;
-use settings::Settings;
+use settings::SETTINGS;
 use simplelog;
 
 #[tokio::main]
@@ -16,7 +16,8 @@ async fn main() -> Result<()> {
     // Initialize the logger.
     simplelog::SimpleLogger::init(simplelog::LevelFilter::Info, simplelog::Config::default())?;
 
-    let settings = Settings::new()?;
+    let settings = &*SETTINGS;
+    println!("{:?}", settings);
 
     let mut docker_executor = DockerExecutor::new().await?;
     docker_executor
