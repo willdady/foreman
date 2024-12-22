@@ -1,0 +1,2 @@
+[docker]
+url = 'unix:///var/run/docker.sock'
