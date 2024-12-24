@@ -1,6 +1,0 @@
-[core]
-url = 'https://example.com'
-token = 'your_token_here'
-
-[docker]
-url = 'unix:///var/run/docker.sock'
