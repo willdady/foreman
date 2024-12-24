@@ -1,0 +1,29 @@
+# This is an example foreman config file.
+# All fields are optional unless marked REQUIRED.
+
+[core]
+# URL of the control server - REQUIRED
+url = 'https://example.com'
+
+# API token for authentication with control server - REQUIRED
+token = 'your_token_here'
+
+# How frequently to poll the control server for jobs
+# poll_frequency = 5000
+
+# How long to wait for a response from the control server
+# poll_timeout = 30000
+
+
+[docker]
+# Docker deamon endpoint
+# url = 'unix:///var/run/docker.sock'
+
+# Start port for container mapping
+# start_port = 49152
+
+# End port for container mapping
+# end_port = 65535
+
+# How long to wait for a container to report healthy status
+# container_timeout = 10000

@@ -5,6 +5,15 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
+pub struct Core {
+    pub url: String,
+    pub token: String,
+    pub poll_frequency: u16,
+    pub poll_timeout: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(unused)]
 pub struct Docker {
     pub url: Option<String>,
     pub start_port: u16,
@@ -15,12 +24,15 @@ pub struct Docker {
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Settings {
+    pub core: Core,
     pub docker: Docker,
 }
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
         let s = Config::builder()
+            .set_default("core.poll_frequency", 5000)?
+            .set_default("core.poll_timeout", 30000)?
             .set_default("docker.start_port", 49152)?
             .set_default("docker.end_port", 65535)?
             .set_default("docker.container_timeout", 10000)?
