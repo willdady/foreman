@@ -46,8 +46,12 @@ impl Settings {
         };
 
         let config_path_string = if let Ok(val) = env::var("FOREMAN_CONFIG") {
-            let p = path_exists(Some(val));
-            p.expect("File path defined in FOREMAN_CONFIG environment variable does not exist")
+            path_exists(Some(val)).unwrap_or_else(|| {
+                eprintln!(
+                    "ERROR: File path defined in FOREMAN_CONFIG environment variable does not exist"
+                );
+                std::process::exit(1);
+            })
         } else {
             path_exists(Some(CONFIG_FILE_NAME.to_string()))
                 .or_else(|| {
@@ -57,7 +61,10 @@ impl Settings {
                         format!("{}", home_config_file_path.display());
                     path_exists(Some(home_config_file_path_string))
                 })
-                .expect("Could config file not found")
+                .unwrap_or_else(|| {
+                    eprintln!("ERROR: Unable to find {}", CONFIG_FILE_NAME);
+                    std::process::exit(1);
+                })
         };
 
         let s = Config::builder()
