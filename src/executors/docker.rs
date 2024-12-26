@@ -289,11 +289,10 @@ impl DockerExecutor {
                 // TODO: Add headers from job
                 let resp = self
                     .http_client
-                    .post("https://httpbin.org/post")
+                    .put(format!("http://localhost:8888/job/{}", id))
                     .json(&body)
                     .send()
                     .await?;
-                info!("Response: {}", resp.text().await?);
             }
             HealthStatusEnum::STARTING => {
                 self.stop_and_remove_container(&container_name).await?;
