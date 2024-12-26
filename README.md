@@ -58,6 +58,27 @@ An executor is responsible for executing jobs on behalf of a foreman agent.
 
 Foreman uses Docker as it's job executor.
 
+## Sequence diagram
+
+The following sequence diagram illustrates the flow of a job execution request between foreman, a control server and an executor.
+
+```mermaid
+sequenceDiagram
+    participant CS as Control Server
+    participant F as Foreman
+    participant E as Executor (Docker)
+    F->>CS: GET /job
+    CS-->>F: JSON
+    F->>E: Start container
+    E->>F: GET /job
+    F-->>E: JSON
+    E->>E: Execute job
+    E->>F: PUT /job/<job-id>
+    F->>CS: PUT /job/<job-id>
+    CS-->>F: OK
+    F->>E: Stop and remove container
+```
+
 ## Job schemas
 
 TODO
