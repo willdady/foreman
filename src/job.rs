@@ -46,7 +46,7 @@ pub struct DockerJob {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
+#[serde(untagged)]
 #[serde(rename_all_fields = "camelCase")]
 pub enum Job {
     #[serde(rename = "docker")]
@@ -62,7 +62,6 @@ mod tests {
     #[test]
     fn test_deserialize_docker_job() {
         let json = r#"{
-            "type": "docker",
             "id": "123abc",
             "image": "alpine:latest",
             "port": 8080,

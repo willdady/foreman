@@ -3,7 +3,6 @@ import { Application, Router } from "@oak/oak";
 const PORT = 8888;
 
 interface Job {
-  type: "docker";
   id: string;
   image: string;
   command?: string[];
@@ -16,7 +15,6 @@ interface Job {
 
 const jobFactory = (): Job => {
   return {
-    type: "docker",
     id: crypto.randomUUID(),
     image: "vs-test-image:latest",
     command: [
@@ -27,7 +25,7 @@ const jobFactory = (): Job => {
     port: 80,
     body: {},
     callbackUrl: `http://localhost:${PORT}/job-response`,
-    alwaysPull: true,
+    alwaysPull: false,
   };
 };
 
