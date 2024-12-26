@@ -9,7 +9,6 @@ interface Job {
   command?: string[];
   port: number;
   body: any;
-  method: string;
   env?: Record<string, string>;
   callbackUrl: string;
   alwaysPull: boolean;
@@ -27,7 +26,6 @@ const jobFactory = (): Job => {
     ],
     port: 80,
     body: {},
-    method: "POST",
     callbackUrl: `http://localhost:${PORT}/job-response`,
     alwaysPull: true,
   };

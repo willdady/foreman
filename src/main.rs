@@ -10,7 +10,6 @@ use anyhow::{Ok, Result};
 use executors::{DockerExecutor, Executor};
 use job::{
     //DockerJob,
-    //DockerJobHTTPMethod,
     Job,
 };
 // use serde_json::json;
@@ -96,7 +95,6 @@ async fn main() -> Result<()> {
     //         "echo Yo && sleep 30 && echo Foo && False".to_string(),
     //     ]),
     //     body: json!({"foo": "bar"}),
-    //     method: DockerJobHTTPMethod::POST,
     //     env: None,
     //     always_pull: false,
     // });
@@ -112,7 +110,6 @@ async fn main() -> Result<()> {
     //         "echo Yo && sleep 180 && echo I am job 2 ".to_string(),
     //     ]),
     //     body: json!({"foo": "bar"}),
-    //     method: DockerJobHTTPMethod::POST,
     //     env: None,
     //     always_pull: false,
     // });

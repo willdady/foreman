@@ -4,15 +4,6 @@ use serde::Deserialize;
 use serde_json::Value;
 
 #[derive(Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum DockerJobHTTPMethod {
-    #[serde(alias = "post")]
-    POST,
-    #[serde(alias = "put")]
-    PUT,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
 pub struct EnvVars(HashMap<String, String>);
 
 impl EnvVars {
@@ -49,7 +40,6 @@ pub struct DockerJob {
     pub port: u16,
     pub command: Option<Vec<String>>,
     pub body: Value,
-    pub method: DockerJobHTTPMethod,
     pub env: Option<EnvVars>,
     pub callback_url: String,
     pub always_pull: bool,
@@ -84,7 +74,6 @@ mod tests {
             "env": {
                 "NODE_ENV": "development"
             },
-            "method": "POST",
             "callbackUrl": "https://api.example.com/callback",
             "alwaysPull": true
         }"#;
@@ -98,7 +87,6 @@ mod tests {
                 port,
                 command,
                 body,
-                method,
                 env,
                 callback_url,
                 always_pull,
@@ -116,7 +104,6 @@ mod tests {
                     Some(vec!["echo".to_string(), "Hello world!".to_string()])
                 );
                 assert_eq!(body, json!({ "foo": "bar", "eggs": "spam" }));
-                assert_eq!(method, DockerJobHTTPMethod::POST);
                 assert_eq!(env, Some(test_env));
                 assert_eq!(callback_url, "https://api.example.com/callback");
                 assert_eq!(always_pull, true);
