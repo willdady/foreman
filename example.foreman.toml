@@ -3,7 +3,7 @@
 
 [core]
 # URL of the control server - REQUIRED
-url = 'https://example.com'
+url = 'http://localhost:8888/job'
 
 # API token for authentication with control server - REQUIRED
 token = 'your_token_here'
