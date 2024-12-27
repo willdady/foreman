@@ -8,6 +8,9 @@ url = 'http://localhost:8888/job'
 # API token for authentication with control server - REQUIRED
 token = 'your_token_here'
 
+# Port on which to expose foreman
+# port = 3000
+
 # How frequently to poll the control server for jobs
 # poll_frequency = 5000
 

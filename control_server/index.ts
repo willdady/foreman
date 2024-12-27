@@ -49,5 +49,5 @@ const app = new Application();
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-app.listen({ port: PORT });
 console.log(`Server running at http://localhost:${PORT}`);
+app.listen({ port: PORT });

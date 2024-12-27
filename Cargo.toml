@@ -16,3 +16,4 @@ reqwest = { version = "0.12.9", features = ["json"]}
 simplelog = "0.12.2"
 thiserror = "2.0.8"
 dirs = "5.0.1"
+axum = "0.7.9"

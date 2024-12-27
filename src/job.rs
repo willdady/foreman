@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct EnvVars(HashMap<String, String>);
 
 impl EnvVars {
@@ -31,7 +31,7 @@ impl From<EnvVars> for Vec<String> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type")]
 #[serde(rename_all = "camelCase")]
 pub struct DockerJob {
@@ -45,7 +45,7 @@ pub struct DockerJob {
     pub always_pull: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
 #[serde(rename_all_fields = "camelCase")]
 pub enum Job {
