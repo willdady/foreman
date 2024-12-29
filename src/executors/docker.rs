@@ -287,12 +287,12 @@ impl DockerExecutor {
             HealthStatusEnum::HEALTHY => {
                 info!("Container {} is healthy!", container_name);
                 // TODO: Add headers from job
-                let resp = self
-                    .http_client
-                    .put(format!("http://localhost:8888/job/{}", id))
-                    .json(&body)
-                    .send()
-                    .await?;
+                // let resp = self
+                //     .http_client
+                //     .put(format!("http://localhost:8888/job/{}", id))
+                //     .json(&body)
+                //     .send()
+                //     .await?;
             }
             HealthStatusEnum::STARTING => {
                 self.stop_and_remove_container(&container_name).await?;

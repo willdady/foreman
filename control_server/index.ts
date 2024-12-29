@@ -14,17 +14,18 @@ interface Job {
 }
 
 const jobFactory = (): Job => {
+  const id = crypto.randomUUID();
   return {
     id: crypto.randomUUID(),
     image: "vs-test-image:latest",
     command: [
       "/bin/sh",
       "-c",
-      "echo 'I am a fake job simulating some work' && sleep 30",
+      "echo 'I am a fake job simulating some work' && sleep 60",
     ],
     port: 80,
     body: {},
-    callbackUrl: `http://localhost:${PORT}/job-response`,
+    callbackUrl: `http://localhost:${PORT}/job/${id}`,
     alwaysPull: false,
   };
 };
@@ -38,10 +39,10 @@ router.get("/job", (ctx) => {
 });
 
 router.put("/job/:jobId", (ctx) => {
+  console.log(`Handling job response for job ${ctx.params.jobId}`);
   console.log("headers:", ctx.request.headers);
   // TODO: Verify the agent id is valid and that it has permission to access this endpoint
   // TODO: Update the job's status based on the response from the callback URL
-  console.log(`Handling job response for job ${ctx.params.jobId}`);
   ctx.response.body = "ok";
 });
 

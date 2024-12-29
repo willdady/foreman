@@ -65,6 +65,11 @@ impl JobTracker {
         self.jobs.contains_key(id)
     }
 
+    pub fn get_job(&self, id: &str) -> Option<&Job> {
+        let tracked_job = self.jobs.get(id);
+        tracked_job.and_then(|tj| Some(&tj.job))
+    }
+
     pub fn update_status(&mut self, id: &str, status: JobStatus) -> Result<()> {
         if let Some(tracked_job) = self.jobs.get_mut(id) {
             tracked_job.status = status;
@@ -82,6 +87,10 @@ pub enum JobTrackerCommand {
     HasJob {
         job_id: String,
         resp: JobTrackerCommandResponder<bool>,
+    },
+    GetJob {
+        job_id: String,
+        resp: JobTrackerCommandResponder<Option<Job>>,
     },
     UpdateStatus {
         job_id: String,
