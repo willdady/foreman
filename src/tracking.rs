@@ -32,6 +32,7 @@ impl FromStr for JobStatus {
 struct TrackedJob {
     job: Job,
     status: JobStatus,
+    progress: f64,
     start_time: Duration,
 }
 
@@ -53,6 +54,7 @@ impl JobTracker {
                 let tracked_job = TrackedJob {
                     job,
                     status: JobStatus::Pending,
+                    progress: 0.0,
                     start_time: Duration::from_secs(0),
                 };
                 self.jobs.insert(job_id, tracked_job);
@@ -70,9 +72,10 @@ impl JobTracker {
         tracked_job.and_then(|tj| Some(&tj.job))
     }
 
-    pub fn update_status(&mut self, id: &str, status: JobStatus) -> Result<()> {
+    pub fn update_status(&mut self, id: &str, status: JobStatus, progress: f64) -> Result<()> {
         if let Some(tracked_job) = self.jobs.get_mut(id) {
             tracked_job.status = status;
+            tracked_job.progress = progress;
             return Ok(());
         }
         bail!("Invalid job id");
@@ -95,6 +98,7 @@ pub enum JobTrackerCommand {
     UpdateStatus {
         job_id: String,
         status: JobStatus,
+        progress: f64,
         resp: JobTrackerCommandResponder<()>,
     },
 }

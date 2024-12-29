@@ -129,9 +129,10 @@ async fn main() -> Result<()> {
                 JobTrackerCommand::UpdateStatus {
                     job_id,
                     status,
+                    progress,
                     resp,
                 } => {
-                    let result = job_tracker.update_status(&job_id, status);
+                    let result = job_tracker.update_status(&job_id, status, progress);
                     resp.send(result)
                         .expect("Failed to send update status response over channel");
                 }
@@ -146,7 +147,7 @@ async fn main() -> Result<()> {
             |Path(job_id): Path<String>, headers: HeaderMap, body: Bytes| async move {
                 info!("Received PUT request for job ID: {}", job_id);
                 debug!("Headers: {:?}", headers);
-                let job_status: JobStatus = match headers.get("x-foreman-job-status") {
+                let status: JobStatus = match headers.get("x-foreman-job-status") {
                     Some(hv) => match hv.to_str() {
                         std::result::Result::Ok(s) => match s.parse() {
                             std::result::Result::Ok(js) => js,
@@ -171,8 +172,7 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                // FIXME: Store this in JobTracker
-                let job_progress: f64 = headers
+                let progress: f64 = headers
                     .get("x-foreman-job-progress")
                     .and_then(|hv| hv.to_str().ok())
                     .and_then(|s| s.parse().ok())
@@ -183,7 +183,8 @@ async fn main() -> Result<()> {
                 job_tracker_tx3
                     .send(JobTrackerCommand::UpdateStatus {
                         job_id: job_id.clone(),
-                        status: job_status,
+                        status,
+                        progress,
                         resp: resp_tx,
                     })
                     .await
