@@ -27,7 +27,6 @@ use bollard::{
 pub struct DockerExecutor {
     docker: Docker,
     network_name: String,
-    http_client: reqwest::Client,
     port_manager: PortManager,
 }
 
@@ -42,7 +41,6 @@ impl DockerExecutor {
         let _self = DockerExecutor {
             docker,
             network_name: network_name.to_string(),
-            http_client: reqwest::Client::new(),
             port_manager,
         };
         _self.create_network().await?;
@@ -286,13 +284,6 @@ impl DockerExecutor {
         match health_status {
             HealthStatusEnum::HEALTHY => {
                 info!("Container {} is healthy!", container_name);
-                // TODO: Add headers from job
-                // let resp = self
-                //     .http_client
-                //     .put(format!("http://localhost:8888/job/{}", id))
-                //     .json(&body)
-                //     .send()
-                //     .await?;
             }
             HealthStatusEnum::STARTING => {
                 self.stop_and_remove_container(&container_name).await?;

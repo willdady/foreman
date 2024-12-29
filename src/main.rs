@@ -61,9 +61,9 @@ async fn main() -> Result<()> {
             .unwrap();
         loop {
             let job_result: anyhow::Result<Job> = async {
-                // TODO: Add Authorization header!
                 let job = http_client
                     .get(&settings.core.url)
+                    .header("Authorization", format!("Bearer {}", settings.core.token))
                     .send()
                     .await?
                     .json::<Job>()
@@ -223,7 +223,6 @@ async fn main() -> Result<()> {
                 // Send a PUT request to the callback URL
                 info!("Sending PUT request to callback URL {}", callback_url);
                 let http_client = reqwest::Client::new();
-                // TODO: Add Authorization header!
                 let mut headers = headers.clone();
                 headers.insert("user-agent", HeaderValue::from_str(&*USER_AGENT).unwrap());
                 let resp = http_client
