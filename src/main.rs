@@ -12,6 +12,7 @@ use axum::{
     body::Bytes,
     extract::Path,
     http::{HeaderMap, HeaderValue},
+    routing::get,
     routing::put,
     Router,
 };
@@ -141,110 +142,119 @@ async fn main() -> Result<()> {
     });
 
     let job_tracker_tx3 = job_tracker_tx.clone();
-    let app = Router::new().route(
-        "/job/:job_id",
-        put(
-            |Path(job_id): Path<String>, headers: HeaderMap, body: Bytes| async move {
-                info!("Received PUT request for job ID: {}", job_id);
-                debug!("Headers: {:?}", headers);
-                let status: JobStatus = match headers.get("x-foreman-job-status") {
-                    Some(hv) => match hv.to_str() {
-                        std::result::Result::Ok(s) => match s.parse() {
-                            std::result::Result::Ok(js) => js,
+    let app = Router::new()
+        .route(
+            "/job/:job_id",
+            get(|Path(job_id): Path<String>| async move {
+                // TODO:
+                // - Claim a job from JobTracker (automatically change it's status to "running")
+                (StatusCode::NOT_FOUND, "Job not found".to_string())
+            }),
+        )
+        .route(
+            "/job/:job_id",
+            put(
+                |Path(job_id): Path<String>, headers: HeaderMap, body: Bytes| async move {
+                    info!("Received PUT request for job ID: {}", job_id);
+                    debug!("Headers: {:?}", headers);
+                    let status: JobStatus = match headers.get("x-foreman-job-status") {
+                        Some(hv) => match hv.to_str() {
+                            std::result::Result::Ok(s) => match s.parse() {
+                                std::result::Result::Ok(js) => js,
+                                Err(e) => {
+                                    let error_msg =
+                                        format!("Invalid header x-foreman-job-status: {}", e);
+                                    error!("{}", error_msg);
+                                    return (StatusCode::BAD_REQUEST, error_msg);
+                                }
+                            },
                             Err(e) => {
                                 let error_msg =
-                                    format!("Invalid header x-foreman-job-status: {}", e);
+                                    format!("Failed to parse x-foreman-job-status header: {}", e);
                                 error!("{}", error_msg);
                                 return (StatusCode::BAD_REQUEST, error_msg);
                             }
                         },
-                        Err(e) => {
-                            let error_msg =
-                                format!("Failed to parse x-foreman-job-status header: {}", e);
+                        None => {
+                            let error_msg = "Missing x-foreman-job-status header";
                             error!("{}", error_msg);
-                            return (StatusCode::BAD_REQUEST, error_msg);
+                            return (StatusCode::BAD_REQUEST, error_msg.to_string());
                         }
-                    },
-                    None => {
-                        let error_msg = "Missing x-foreman-job-status header";
-                        error!("{}", error_msg);
-                        return (StatusCode::BAD_REQUEST, error_msg.to_string());
+                    };
+
+                    let progress: f64 = headers
+                        .get("x-foreman-job-progress")
+                        .and_then(|hv| hv.to_str().ok())
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0.0);
+
+                    // Update the job status in the JobTracker.
+                    let (resp_tx, resp_rx) = oneshot::channel();
+                    job_tracker_tx3
+                        .send(JobTrackerCommand::UpdateStatus {
+                            job_id: job_id.clone(),
+                            status,
+                            progress,
+                            resp: resp_tx,
+                        })
+                        .await
+                        .expect("Failed sending UpdateStatus command");
+
+                    if let Err(e) = resp_rx.await {
+                        error!("Error updating job status: {}", e);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to update job status".to_string(),
+                        );
                     }
-                };
 
-                let progress: f64 = headers
-                    .get("x-foreman-job-progress")
-                    .and_then(|hv| hv.to_str().ok())
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0);
+                    // Get the job object from the JobTracker
+                    let (resp_tx, resp_rx) = oneshot::channel();
+                    job_tracker_tx3
+                        .send(JobTrackerCommand::GetJob {
+                            job_id,
+                            resp: resp_tx,
+                        })
+                        .await
+                        .expect("Failed sending GetJob command");
 
-                // Update the job status in the JobTracker.
-                let (resp_tx, resp_rx) = oneshot::channel();
-                job_tracker_tx3
-                    .send(JobTrackerCommand::UpdateStatus {
-                        job_id: job_id.clone(),
-                        status,
-                        progress,
-                        resp: resp_tx,
-                    })
-                    .await
-                    .expect("Failed sending UpdateStatus command");
+                    let job_opt = resp_rx
+                        .await
+                        .expect("Failed to get job from channel")
+                        .ok()
+                        .flatten();
+                    if let None = job_opt {
+                        return (StatusCode::NOT_FOUND, "Job not found".to_string());
+                    }
+                    let job: Job = job_opt.unwrap();
+                    let callback_url = match job {
+                        Job::Docker(docker_job) => docker_job.callback_url.clone(),
+                    };
 
-                if let Err(e) = resp_rx.await {
-                    error!("Error updating job status: {}", e);
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to update job status".to_string(),
-                    );
-                }
+                    // Send a PUT request to the callback URL
+                    info!("Sending PUT request to callback URL {}", callback_url);
+                    let http_client = reqwest::Client::new();
+                    let mut headers = headers.clone();
+                    headers.insert("user-agent", HeaderValue::from_str(&*USER_AGENT).unwrap());
+                    let resp = http_client
+                        .put(callback_url)
+                        .headers(headers)
+                        .body(Into::<reqwest::Body>::into(body))
+                        .send()
+                        .await;
+                    if let std::result::Result::Ok(resp) = resp {
+                        let status_code = resp.status();
+                        info!("Status code {}", status_code);
+                    } else {
+                        let error_msg = format!("Failed to send PUT request: {:?}", resp);
+                        error!("{}", error_msg);
+                        return (StatusCode::BAD_REQUEST, error_msg);
+                    }
 
-                // Get the job object from the JobTracker
-                let (resp_tx, resp_rx) = oneshot::channel();
-                job_tracker_tx3
-                    .send(JobTrackerCommand::GetJob {
-                        job_id,
-                        resp: resp_tx,
-                    })
-                    .await
-                    .expect("Failed sending GetJob command");
-
-                let job_opt = resp_rx
-                    .await
-                    .expect("Failed to get job from channel")
-                    .ok()
-                    .flatten();
-                if let None = job_opt {
-                    return (StatusCode::NOT_FOUND, "Job not found".to_string());
-                }
-                let job: Job = job_opt.unwrap();
-                let callback_url = match job {
-                    Job::Docker(docker_job) => docker_job.callback_url.clone(),
-                };
-
-                // Send a PUT request to the callback URL
-                info!("Sending PUT request to callback URL {}", callback_url);
-                let http_client = reqwest::Client::new();
-                let mut headers = headers.clone();
-                headers.insert("user-agent", HeaderValue::from_str(&*USER_AGENT).unwrap());
-                let resp = http_client
-                    .put(callback_url)
-                    .headers(headers)
-                    .body(Into::<reqwest::Body>::into(body))
-                    .send()
-                    .await;
-                if let std::result::Result::Ok(resp) = resp {
-                    let status_code = resp.status();
-                    info!("Status code {}", status_code);
-                } else {
-                    let error_msg = format!("Failed to send PUT request: {:?}", resp);
-                    error!("{}", error_msg);
-                    return (StatusCode::BAD_REQUEST, error_msg);
-                }
-
-                return (StatusCode::OK, "OK".to_string());
-            },
-        ),
-    );
+                    return (StatusCode::OK, "OK".to_string());
+                },
+            ),
+        );
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", settings.core.port))
         .await

@@ -4,13 +4,19 @@
 
 [core]
 # URL of the control server - REQUIRED
-url = 'http://localhost:8888/job'
+url = "http://localhost:8888/job"
 
 # API token for authentication with control server - REQUIRED
-token = 'your_token_here'
+token = "YOUR_TOKEN_HERE"
+
+# Hostname containers will use to access the agent's API - REQUIRED
+hostname = "YOUR_HOSTNAME_HERE"
 
 # Port on which to expose foreman
 # port = 3000
+
+# Additional hosts to add to containers e.g. `extra_hosts = ["host.docker.internal:host-gateway"]`
+# extra_hosts = []
 
 # How frequently to poll the control server for jobs
 # poll_frequency = 5000

@@ -88,6 +88,7 @@ impl DockerExecutor {
 
     async fn create_container(
         &self,
+        id: &str,
         container_name: &str,
         image: &str,
         port: u16,
@@ -120,14 +121,23 @@ impl DockerExecutor {
         exposed_ports.insert(_port.as_str(), empty_object);
 
         // Convert env from HashMap to Vec<&str>
-        let env_strings: Option<Vec<String>> = env.map(|_env| _env.into());
-        let env_vec: Option<Vec<&str>> = env_strings
-            .as_ref()
-            .map(|v| v.iter().map(|s| s.as_str()).collect());
+        let mut env_strings: Vec<String> = env.unwrap_or_default().into();
+        env_strings.push(format!(
+            "FOREMAN_GET_JOB_ENDPOINT={}:{}/job/{}",
+            SETTINGS.core.hostname, SETTINGS.core.port, id
+        ));
+        env_strings.push(format!(
+            "FOREMAN_PUT_JOB_ENDPOINT={}:{}/job/{}",
+            SETTINGS.core.hostname, SETTINGS.core.port, id
+        ));
+        let env_strings: Vec<&str> = env_strings.iter().map(|s| s.as_str()).collect();
 
         // Container labels
         let mut labels = HashMap::new();
         labels.insert("managed-by", "foreman");
+
+        // Extra hosts
+        let extra_hosts = SETTINGS.core.extra_hosts.clone();
 
         let config = Config {
             image: Some(image),
@@ -136,9 +146,10 @@ impl DockerExecutor {
             host_config: Some(bollard::service::HostConfig {
                 port_bindings: Some(port_bindings),
                 network_mode: Some(self.network_name.clone()),
+                extra_hosts,
                 ..Default::default()
             }),
-            env: env_vec,
+            env: Some(env_strings),
             labels: Some(labels),
             ..Default::default()
         };
@@ -256,7 +267,7 @@ impl DockerExecutor {
         }
         // Create container
         let host_port = self.port_manager.reserve_port()?;
-        self.create_container(&container_name, &image, port, host_port, command, env)
+        self.create_container(&id, &container_name, &image, port, host_port, command, env)
             .await?;
         // Start container
         self.start_container(&container_name).await?;

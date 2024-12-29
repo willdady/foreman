@@ -10,10 +10,12 @@ const CONFIG_FILE_NAME: &'static str = "foreman.toml";
 #[allow(unused)]
 pub struct Core {
     pub url: String,
+    pub hostname: String,
     pub port: u16,
     pub token: String,
     pub poll_frequency: u16,
     pub poll_timeout: u16,
+    pub extra_hosts: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
