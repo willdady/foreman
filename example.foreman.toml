@@ -1,5 +1,6 @@
 # This is an example foreman config file.
 # All fields are optional unless marked REQUIRED.
+# Copy this file before making changes `cp example.foreman.toml foreman.toml`
 
 [core]
 # URL of the control server - REQUIRED

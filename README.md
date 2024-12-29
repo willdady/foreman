@@ -1,12 +1,12 @@
 # foreman
 
-TODO
+Foreman is a self-hostable Rust-based agent which retrieves jobs from a control server and executes them inside a containerised environment.
 
 ## Features
 
-- **Language agnostic**: Jobs are processed in containerised environments.
-- **Secure by default**: Self-hostable behind a NAT gateway, without the need to be exposed to the internet directly.
-- **Fast, efficient and lightweight**: Foreman is a single, Rust-based binary
+- **💬 Language agnostic**: Jobs are processed in containerised environments.
+- **🔐 Secure by default**: Self-hostable behind a NAT gateway, without the need to be exposed publically over the internet.
+- **🚀 Fast, efficient and lightweight**: Compiles to a single binary executable
 
 ## Installation
 
@@ -24,7 +24,27 @@ cargo build --release
 
 ## Usage
 
-TODO
+The foreman binary expects to find a configuration file named `foreman.toml` in one of the following locations:
+
+- The current working directory
+- `$HOME/.foreman/foreman.toml`
+- At a path specified by the `FOREMAN_CONFIG` environment variable. e.g. `FOREMAN_CONFIG=/path/to/foreman.toml`
+
+Refer to [example.foreman.toml](example.foreman.toml) for an explanation of the various configuration options and their defaults.
+
+Alternatively, config values can be specified via environment variables.
+Each environment variable should be prefixed with `FOREMAN_`.
+
+For example ...
+
+```toml
+[core]
+port = 8080
+```
+
+... can be specified via the environment variable `FOREMAN_CORE_PORT=8080`.
+
+Values set via environment variables will override any values specified in `foreman.toml`.
 
 ## Concepts
 
@@ -49,14 +69,14 @@ TODO - publish an OpenAPI spec
 
 ### Job
 
-A job is a single task that needs to be executed.
+A job defines a single task that needs to be executed.
 It can be anything from running a script to deploying an application.
 
 ### Executor
 
 An executor is responsible for executing jobs on behalf of a foreman agent.
 
-Foreman uses Docker as it's job executor.
+Foreman manages Docker as it's job executor.
 
 ## Sequence diagram
 
@@ -80,6 +100,10 @@ sequenceDiagram
 ```
 
 ## Job schemas
+
+TODO
+
+## Authoring a job processor image
 
 TODO
 
