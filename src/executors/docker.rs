@@ -125,6 +125,10 @@ impl DockerExecutor {
             .as_ref()
             .map(|v| v.iter().map(|s| s.as_str()).collect());
 
+        // Container labels
+        let mut labels = HashMap::new();
+        labels.insert("managed-by", "foreman");
+
         let config = Config {
             image: Some(image),
             cmd,
@@ -135,6 +139,7 @@ impl DockerExecutor {
                 ..Default::default()
             }),
             env: env_vec,
+            labels: Some(labels),
             ..Default::default()
         };
 
