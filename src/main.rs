@@ -12,21 +12,24 @@ use axum::{
     body::Bytes,
     extract::Path,
     http::{HeaderMap, HeaderValue},
-    routing::get,
-    routing::put,
-    Router,
+    routing::{get, put},
+    Json, Router,
 };
 use executors::{DockerExecutor, Executor};
 use job::Job;
 use log::{debug, error, info};
 use reqwest::StatusCode;
+use serde_json::json;
 use settings::SETTINGS;
 use simplelog;
 use tokio::{
     join,
-    sync::{mpsc, oneshot},
+    sync::{
+        mpsc::{self, Sender},
+        oneshot,
+    },
 };
-use tracking::{JobStatus, JobTracker, JobTrackerCommand};
+use tracking::{get_job, JobStatus, JobTracker, JobTrackerCommand};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
@@ -137,13 +140,27 @@ async fn main() -> Result<()> {
     });
 
     let job_tracker_tx3 = job_tracker_tx.clone();
+    let job_tracker_tx4 = job_tracker_tx.clone();
     let app = Router::new()
         .route(
             "/job/:job_id",
             get(|Path(job_id): Path<String>| async move {
                 // TODO:
-                // - Claim a job from JobTracker (automatically change it's status to "running")
-                (StatusCode::NOT_FOUND, "Job not found".to_string())
+                // - Return a ref to the inner TrackedJob object so we can see it's status more easily!
+                // - Don't return 'complete' jobs
+                // - Update the job status to 'running' before returning job response
+                let job_opt = get_job(&job_id, job_tracker_tx3).await;
+                if let None = job_opt {
+                    return (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" })));
+                }
+
+                let job = job_opt.unwrap();
+                let Job::Docker(docker_job) = job.as_ref();
+
+                return (
+                    StatusCode::OK,
+                    Json(json!({ "id": docker_job.id, "body": docker_job.body })),
+                );
             }),
         )
         .route(
@@ -185,7 +202,7 @@ async fn main() -> Result<()> {
 
                     // Update the job status in the JobTracker.
                     let (resp_tx, resp_rx) = oneshot::channel();
-                    job_tracker_tx3
+                    job_tracker_tx4
                         .send(JobTrackerCommand::UpdateStatus {
                             job_id: job_id.clone(),
                             status,
@@ -204,20 +221,7 @@ async fn main() -> Result<()> {
                     }
 
                     // Get the job object from the JobTracker
-                    let (resp_tx, resp_rx) = oneshot::channel();
-                    job_tracker_tx3
-                        .send(JobTrackerCommand::GetJob {
-                            job_id,
-                            resp: resp_tx,
-                        })
-                        .await
-                        .expect("Failed sending GetJob command");
-
-                    let job_opt = resp_rx
-                        .await
-                        .expect("Failed to get job from channel")
-                        .ok()
-                        .flatten();
+                    let job_opt = get_job(&job_id, job_tracker_tx4).await;
                     if let None = job_opt {
                         return (StatusCode::NOT_FOUND, "Job not found".to_string());
                     }

@@ -24,7 +24,9 @@ const jobFactory = (): Job => {
       "echo 'I am a fake job simulating some work' && sleep 60",
     ],
     port: 80,
-    body: {},
+    body: {
+      data: "Hello, world!",
+    },
     callbackUrl: `http://localhost:${PORT}/job/${id}`,
     alwaysPull: false,
   };

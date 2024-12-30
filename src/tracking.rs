@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::{bail, Ok, Result};
 use serde::Deserialize;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::job::{DockerJob, Job};
 
@@ -100,6 +100,23 @@ pub enum JobTrackerCommand {
 }
 
 pub type JobTrackerCommandResponder<T> = oneshot::Sender<Result<T>>;
+
+pub async fn get_job(job_id: &str, tx: Sender<JobTrackerCommand>) -> Option<Arc<Job>> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::GetJob {
+        job_id: job_id.to_owned(),
+        resp: resp_tx,
+    })
+    .await
+    .expect("Failed sending GetJob command");
+
+    let job_opt = resp_rx
+        .await
+        .expect("Failed to get job from channel")
+        .ok()
+        .flatten();
+    job_opt
+}
 
 #[cfg(test)]
 mod tests {

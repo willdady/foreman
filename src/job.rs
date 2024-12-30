@@ -32,7 +32,6 @@ impl From<EnvVars> for Vec<String> {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[serde(tag = "type")]
 #[serde(rename_all = "camelCase")]
 pub struct DockerJob {
     pub id: String,
