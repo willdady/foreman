@@ -117,11 +117,6 @@ async fn main() -> Result<()> {
                 JobTrackerCommand::Insert { job } => {
                     job_tracker.insert(job);
                 }
-                JobTrackerCommand::HasJob { job_id, resp } => {
-                    let result = job_tracker.has_job(&job_id);
-                    resp.send(Ok(result))
-                        .expect("Failed to send has job response over channel");
-                }
                 JobTrackerCommand::GetJob { job_id, resp } => {
                     let result = job_tracker.get_job(&job_id).and_then(|j| Some(j.clone()));
                     resp.send(Ok(result))
@@ -226,8 +221,8 @@ async fn main() -> Result<()> {
                     if let None = job_opt {
                         return (StatusCode::NOT_FOUND, "Job not found".to_string());
                     }
-                    let job: Job = job_opt.unwrap();
-                    let callback_url = match job {
+                    let job = job_opt.unwrap();
+                    let callback_url = match job.as_ref() {
                         Job::Docker(docker_job) => docker_job.callback_url.clone(),
                     };
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, time::Duration};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::{bail, Ok, Result};
 use serde::Deserialize;
@@ -30,7 +30,7 @@ impl FromStr for JobStatus {
 }
 
 struct TrackedJob {
-    job: Job,
+    job: Arc<Job>,
     status: JobStatus,
     progress: f64,
     start_time: Duration,
@@ -52,7 +52,7 @@ impl JobTracker {
             Job::Docker(DockerJob { ref id, .. }) => {
                 let job_id = id.to_owned();
                 let tracked_job = TrackedJob {
-                    job,
+                    job: Arc::new(job),
                     status: JobStatus::Pending,
                     progress: 0.0,
                     start_time: Duration::from_secs(0),
@@ -67,7 +67,7 @@ impl JobTracker {
         self.jobs.contains_key(id)
     }
 
-    pub fn get_job(&self, id: &str) -> Option<&Job> {
+    pub fn get_job(&self, id: &str) -> Option<&Arc<Job>> {
         let tracked_job = self.jobs.get(id);
         tracked_job.and_then(|tj| Some(&tj.job))
     }
@@ -87,13 +87,9 @@ pub enum JobTrackerCommand {
         job: Job,
         // resp: JobTrackerCommandResponder<()>,
     },
-    HasJob {
-        job_id: String,
-        resp: JobTrackerCommandResponder<bool>,
-    },
     GetJob {
         job_id: String,
-        resp: JobTrackerCommandResponder<Option<Job>>,
+        resp: JobTrackerCommandResponder<Option<Arc<Job>>>,
     },
     UpdateStatus {
         job_id: String,
