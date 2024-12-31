@@ -1,4 +1,9 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::{bail, Ok, Result};
 use serde::Deserialize;
@@ -29,15 +34,26 @@ impl FromStr for JobStatus {
     }
 }
 
-struct TrackedJob {
-    job: Arc<Job>,
+#[derive(Debug)]
+pub struct TrackedJob {
+    job: Job,
     status: JobStatus,
     progress: f64,
     start_time: Duration,
 }
 
+impl TrackedJob {
+    pub fn inner(&self) -> &Job {
+        &self.job
+    }
+
+    pub fn status(&self) -> &JobStatus {
+        &self.status
+    }
+}
+
 pub struct JobTracker {
-    jobs: HashMap<String, TrackedJob>,
+    jobs: HashMap<String, Arc<Mutex<TrackedJob>>>,
 }
 
 impl JobTracker {
@@ -52,12 +68,13 @@ impl JobTracker {
             Job::Docker(DockerJob { ref id, .. }) => {
                 let job_id = id.to_owned();
                 let tracked_job = TrackedJob {
-                    job: Arc::new(job),
+                    job,
                     status: JobStatus::Pending,
                     progress: 0.0,
                     start_time: Duration::from_secs(0),
                 };
-                self.jobs.insert(job_id, tracked_job);
+
+                self.jobs.insert(job_id, Arc::new(Mutex::new(tracked_job)));
             }
             _ => panic!("Unsupported job type"),
         }
@@ -67,13 +84,13 @@ impl JobTracker {
         self.jobs.contains_key(id)
     }
 
-    pub fn get_job(&self, id: &str) -> Option<&Arc<Job>> {
-        let tracked_job = self.jobs.get(id);
-        tracked_job.and_then(|tj| Some(&tj.job))
+    pub fn get_job(&self, id: &str) -> Option<&Arc<Mutex<TrackedJob>>> {
+        self.jobs.get(id)
     }
 
     pub fn update_status(&mut self, id: &str, status: JobStatus, progress: f64) -> Result<()> {
-        if let Some(tracked_job) = self.jobs.get_mut(id) {
+        if let Some(tracked_job) = self.jobs.get(id) {
+            let mut tracked_job = tracked_job.lock().unwrap();
             tracked_job.status = status;
             tracked_job.progress = progress;
             return Ok(());
@@ -85,11 +102,10 @@ impl JobTracker {
 pub enum JobTrackerCommand {
     Insert {
         job: Job,
-        // resp: JobTrackerCommandResponder<()>,
     },
     GetJob {
         job_id: String,
-        resp: JobTrackerCommandResponder<Option<Arc<Job>>>,
+        resp: JobTrackerCommandResponder<Option<Arc<Mutex<TrackedJob>>>>,
     },
     UpdateStatus {
         job_id: String,
@@ -101,7 +117,10 @@ pub enum JobTrackerCommand {
 
 pub type JobTrackerCommandResponder<T> = oneshot::Sender<Result<T>>;
 
-pub async fn get_job(job_id: &str, tx: Sender<JobTrackerCommand>) -> Option<Arc<Job>> {
+pub async fn get_job(
+    job_id: &str,
+    tx: Sender<JobTrackerCommand>,
+) -> Option<Arc<Mutex<TrackedJob>>> {
     let (resp_tx, resp_rx) = oneshot::channel();
     tx.send(JobTrackerCommand::GetJob {
         job_id: job_id.to_owned(),

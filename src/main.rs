@@ -146,16 +146,22 @@ async fn main() -> Result<()> {
             "/job/:job_id",
             get(|Path(job_id): Path<String>| async move {
                 // TODO:
-                // - Return a ref to the inner TrackedJob object so we can see it's status more easily!
-                // - Don't return 'complete' jobs
                 // - Update the job status to 'running' before returning job response
                 let job_opt = get_job(&job_id, job_tracker_tx3).await;
                 if let None = job_opt {
                     return (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" })));
                 }
 
-                let job = job_opt.unwrap();
-                let Job::Docker(docker_job) = job.as_ref();
+                let tracked_job = job_opt.unwrap();
+                let tracked_job = tracked_job.lock().unwrap();
+                if tracked_job.status() == &JobStatus::Completed {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({ "error": "refusing to return job as it's status is 'completed'" })),
+                    );
+                }
+
+                let Job::Docker(docker_job) = tracked_job.inner();
 
                 return (
                     StatusCode::OK,
@@ -225,9 +231,11 @@ async fn main() -> Result<()> {
                     if let None = job_opt {
                         return (StatusCode::NOT_FOUND, "Job not found".to_string());
                     }
-                    let job = job_opt.unwrap();
-                    let callback_url = match job.as_ref() {
-                        Job::Docker(docker_job) => docker_job.callback_url.clone(),
+                    let callback_url = {
+                        let tracked_job = job_opt.unwrap();
+                        let tracked_job = tracked_job.lock().unwrap();
+                        let Job::Docker(docker_job) = &tracked_job.inner();
+                        docker_job.callback_url.clone()
                     };
 
                     // Send a PUT request to the callback URL
