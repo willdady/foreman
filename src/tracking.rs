@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Ok, Result};
+use log::info;
 use serde::Deserialize;
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -91,6 +92,10 @@ impl JobTracker {
     pub fn update_status(&mut self, id: &str, status: JobStatus, progress: f64) -> Result<()> {
         if let Some(tracked_job) = self.jobs.get(id) {
             let mut tracked_job = tracked_job.lock().unwrap();
+            info!(
+                "Updating job {} with to status {:?} and progress {:.2}",
+                id, status, progress
+            );
             tracked_job.status = status;
             tracked_job.progress = progress;
             return Ok(());
