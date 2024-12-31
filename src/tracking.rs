@@ -11,7 +11,7 @@ use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::job::{DockerJob, Job};
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum JobStatus {
     Pending,
@@ -34,7 +34,7 @@ impl FromStr for JobStatus {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TrackedJob {
     job: Job,
     status: JobStatus,
@@ -119,7 +119,7 @@ pub type JobTrackerCommandResponder<T> = oneshot::Sender<Result<T>>;
 
 pub async fn get_job(
     job_id: &str,
-    tx: Sender<JobTrackerCommand>,
+    tx: &Sender<JobTrackerCommand>,
 ) -> Option<Arc<Mutex<TrackedJob>>> {
     let (resp_tx, resp_rx) = oneshot::channel();
     tx.send(JobTrackerCommand::GetJob {
@@ -135,6 +135,28 @@ pub async fn get_job(
         .ok()
         .flatten();
     job_opt
+}
+
+pub async fn update_job_status(
+    job_id: &str,
+    status: JobStatus,
+    progress: f64,
+    tx: &Sender<JobTrackerCommand>,
+) -> Result<()> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::UpdateStatus {
+        job_id: job_id.to_owned(),
+        status,
+        progress,
+        resp: resp_tx,
+    })
+    .await
+    .expect("Failed sending UpdateStatus command");
+
+    if let Err(e) = resp_rx.await {
+        bail!("Error updating job status: {}", e);
+    };
+    Ok(())
 }
 
 #[cfg(test)]

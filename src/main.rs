@@ -29,7 +29,7 @@ use tokio::{
         oneshot,
     },
 };
-use tracking::{get_job, JobStatus, JobTracker, JobTrackerCommand};
+use tracking::{get_job, update_job_status, JobStatus, JobTracker, JobTrackerCommand};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
@@ -145,28 +145,44 @@ async fn main() -> Result<()> {
         .route(
             "/job/:job_id",
             get(|Path(job_id): Path<String>| async move {
-                // TODO:
-                // - Update the job status to 'running' before returning job response
-                let job_opt = get_job(&job_id, job_tracker_tx3).await;
+                let job_opt = get_job(&job_id, &job_tracker_tx3).await;
                 if let None = job_opt {
                     return (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" })));
                 }
 
-                let tracked_job = job_opt.unwrap();
-                let tracked_job = tracked_job.lock().unwrap();
-                if tracked_job.status() == &JobStatus::Completed {
-                    return (
-                        StatusCode::FORBIDDEN,
-                        Json(json!({ "error": "refusing to return job as it's status is 'completed'" })),
-                    );
-                }
-
+                let tracked_job = {
+                    let tracked_job = job_opt.unwrap();
+                    let tracked_job = tracked_job.lock().unwrap();
+                    tracked_job.clone() // I don't love the clone here :(
+                };
                 let Job::Docker(docker_job) = tracked_job.inner();
 
-                return (
-                    StatusCode::OK,
-                    Json(json!({ "id": docker_job.id, "body": docker_job.body })),
-                );
+                match tracked_job.status() {
+                    &JobStatus::Completed => {
+                         return (
+                            StatusCode::FORBIDDEN,
+                            Json(json!({ "error": "refusing to return job as it's status is 'completed'" })),
+                        );
+                    },
+                    &JobStatus::Pending => {
+                        if let Err(e) = update_job_status(
+                            &docker_job.id,
+                            JobStatus::Running,
+                            0.0,
+                            &job_tracker_tx3,
+                        )
+                        .await {
+                            error!("Failed to update job status: {}", e);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({ "error": "failed to update job status" })),
+                            );
+                        };
+                    }
+                    _ => {}
+                }
+
+                (StatusCode::OK, Json(json!({ "id": docker_job.id, "body": docker_job.body })))
             }),
         )
         .route(
@@ -207,27 +223,18 @@ async fn main() -> Result<()> {
                         .unwrap_or(0.0);
 
                     // Update the job status in the JobTracker.
-                    let (resp_tx, resp_rx) = oneshot::channel();
-                    job_tracker_tx4
-                        .send(JobTrackerCommand::UpdateStatus {
-                            job_id: job_id.clone(),
-                            status,
-                            progress,
-                            resp: resp_tx,
-                        })
-                        .await
-                        .expect("Failed sending UpdateStatus command");
-
-                    if let Err(e) = resp_rx.await {
+                    if let Err(e) =
+                        update_job_status(&job_id, status, progress, &job_tracker_tx4).await
+                    {
                         error!("Error updating job status: {}", e);
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Failed to update job status".to_string(),
                         );
-                    }
+                    };
 
                     // Get the job object from the JobTracker
-                    let job_opt = get_job(&job_id, job_tracker_tx4).await;
+                    let job_opt = get_job(&job_id, &job_tracker_tx4).await;
                     if let None = job_opt {
                         return (StatusCode::NOT_FOUND, "Job not found".to_string());
                     }
