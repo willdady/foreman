@@ -105,7 +105,26 @@ TODO
 
 ## Authoring a job processor image
 
-TODO
+Foreman will create a container based on the `image` defined in a job, pulling the image if necessary.
+
+Containers launched by foreman are expected to query the foreman agent's REST API for their associated job, execute the job and then return a result.
+
+When a container is ready it MUST perform a GET request to the URL contained in the `FOREMAN_GET_JOB_ENDPOINT` environment variable.
+This endpoint returns a JSON object containing the job `id` and it's `body`.
+
+Likewise the container MUST perform a PUT request to the URL contained in the `FOREMAN_PUT_JOB_ENDPOINT` environment variable with updates to the job's status.
+When sending requests to this endpoint the only requirement is the following headers must be set in the request.
+
+| name                   | required | description                                                                                 |
+| ---------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| x-foreman-job-status   | YES      | MUST be either 'running' or 'completed'                                                     |
+| x-foreman-job-progress | NO       | A floating point number representing the progress of the job. Defaults to 0.0 if undefined. |
+
+Requests sent to this endpoint are forwarded to the job's `callbackUrl` as-is.
+The `completed` status is a terminal state and can be set at-most once per job.
+It is invalid to send a PUT request with `x-foreman-job-status` set to `running` on a completed job.
+
+A container becomes eligible for removal once it's status changes to `completed`.
 
 ## Development
 
