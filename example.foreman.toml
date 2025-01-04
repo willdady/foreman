@@ -6,7 +6,9 @@
 # URL of the control server - REQUIRED
 url = "http://localhost:8888/job"
 
-# API token for authentication with control server - REQUIRED
+# Bearer token foreman will send in requests to the the control server.
+# This is set as HTTP header `Authorization: Bearer YOUR_TOKEN_HERE` in GET requests sent to the above `url`.
+# - REQUIRED
 token = "YOUR_TOKEN_HERE"
 
 # Hostname containers will use to access the agent's API - REQUIRED
