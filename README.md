@@ -99,18 +99,71 @@ sequenceDiagram
     F->>E: Stop and remove container
 ```
 
-## Job schemas
+## Job schema
 
-TODO
+A job returned by a control server is expected to conform to the following schema (denoted here as a Typescript interface):
+
+```typescript
+interface Job {
+    /**
+     * Unique identifier for the job
+     */
+    id: string;
+
+    /**
+     * Docker image to use for the job
+     */
+    image: string;
+
+    /**
+     * Port to expose on the container
+     */
+    port: number;
+
+    /**
+     * Command to run in the container
+     */
+    command?: string[];
+
+    /**
+     * Body of the job, which can be any type
+     */
+    body: any;
+
+    /**
+     * Environment variables for the job
+     */
+    env?: { [key: string]: string };
+
+    /**
+     * Callback URL for the job
+     */
+    callbackUrl: string;
+
+    /**
+     * Whether to always pull the Docker image before creating a container
+     */
+    alwaysPull: boolean;
+}
+```
+
+Some things to note:
+
+- The `id` is used to uniquely identify each job and should be unique within your control server.
+  Using a UUID is recommended.
+- The `callbackUrl` does not need to be the same server as your control server (though you will likely still need to signal back to your control server when the job completes).
+- Avoid setting `alwaysPull: true` as it will slow down the creation of job containers. 
+  You should only need this if your image tags are **mutable** which is generally considered bad practice.
+- The job schema is also available in JSON schema format in [job.schema.json](job.schema.json).
 
 ## Authoring a job processor image
 
-Foreman will create a container based on the `image` defined in a job, pulling the image if necessary.
+Foreman will create a container based on the `image` field defined in a job, pulling the image if necessary.
 
-Containers launched by foreman are expected to query the foreman agent's REST API for their associated job, execute the job and then return a result.
+The foreman agent exposes a simple REST API which job containers are expected to communicate with when dealing with their associated job.
 
 When a container is ready it MUST perform a GET request to the URL contained in the `FOREMAN_GET_JOB_ENDPOINT` environment variable.
-This endpoint returns a JSON object containing the job `id` and it's `body`.
+This endpoint returns a JSON object containing the job `id` and `body` fields from the original job received from the control server.
 
 Likewise the container MUST perform a PUT request to the URL contained in the `FOREMAN_PUT_JOB_ENDPOINT` environment variable with updates to the job's status.
 When sending requests to this endpoint the only requirement is the following headers must be set in the request.
