@@ -26,6 +26,11 @@ hostname = "YOUR_HOSTNAME_HERE"
 # How long to wait for a response from the control server
 # poll_timeout = 30000
 
+# Labels to send in the `x-foreman-labels` HTTP header in requests sent to the control server (`core.url` above).
+# These key/value pairs will be formatted `key1=value,key2=value`.
+# The order of the resulting header value is NOT guaranteed.
+# [core.labels]
+# foo = "bar"
 
 [docker]
 # Docker deamon endpoint

@@ -46,6 +46,20 @@ port = 8080
 
 Values set via environment variables will override any values specified in `foreman.toml`.
 
+### Labels
+
+Labels are optional key/value pairs which you can define in the `[core.labels]` section of `foreman.toml`.
+These labels will be sent to your control server in the header `x-foreman-labels` when polling for jobs.
+
+Your control server MAY discriminate requests based on these labels and only deliver matching jobs.
+For example, you may choose to identify features of the forman agent host by defining labels such as `cpu = 4`, `gpu = true` etc.
+
+Similarly, your control server may maintain multiple job queues.
+Labels allow you to assign agents to specific queues e.g. `queue = high-priority` or `queue = low-priority`.
+
+Labels are formatted as a comma-separated list of key/value pairs e.g `cpu=4,gpu=true,queue=high-priority`.
+NOTE, the order of the key/values is NOT guaranteed.
+
 ## Concepts
 
 ### Foreman

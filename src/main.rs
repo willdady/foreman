@@ -58,9 +58,22 @@ async fn main() -> Result<()> {
     // Control server poller
     let job_tracker_tx2 = job_tracker_tx.clone();
     let control_server_poller = tokio::spawn(async move {
+        // Set default headers
+        let mut default_headers = HeaderMap::new();
+        if let Some(labels) = &settings.core.labels {
+            let labels_string: String = labels.into();
+            default_headers.insert(
+                "x-foreman-labels",
+                labels_string
+                    .parse()
+                    .expect("Failed to parse labels into header value"),
+            );
+        }
+        // Configure the HTTP client
         let http_client = reqwest::ClientBuilder::new()
             .timeout(Duration::from_millis(settings.core.poll_timeout.into()))
             .user_agent(&*USER_AGENT)
+            .default_headers(default_headers)
             .build()
             .unwrap();
         loop {

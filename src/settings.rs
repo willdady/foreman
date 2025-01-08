@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::{env, path::Path};
 
@@ -5,6 +6,27 @@ use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 
 const CONFIG_FILE_NAME: &'static str = "foreman.toml";
+
+#[derive(Debug, Deserialize)]
+pub struct LabelMap(HashMap<String, String>);
+
+impl LabelMap {
+    pub fn new() -> Self {
+        LabelMap(HashMap::new())
+    }
+}
+
+impl From<&LabelMap> for String {
+    fn from(label_map: &LabelMap) -> Self {
+        // FIXME: Need to escape `=` and `,`
+        label_map
+            .0
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<String>>()
+            .join(",")
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
@@ -16,6 +38,7 @@ pub struct Core {
     pub poll_frequency: u16,
     pub poll_timeout: u16,
     pub extra_hosts: Option<Vec<String>>,
+    pub labels: Option<LabelMap>,
 }
 
 #[derive(Debug, Deserialize)]
