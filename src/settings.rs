@@ -4,6 +4,7 @@ use std::{env, path::Path};
 
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
+use urlencoding::encode;
 
 const CONFIG_FILE_NAME: &'static str = "foreman.toml";
 
@@ -17,12 +18,13 @@ impl LabelMap {
 }
 
 impl From<&LabelMap> for String {
+    /// Convert a `LabelMap` to a string in the format "key=value,key=value".
+    /// Both keys and values are URL-encoded.
     fn from(label_map: &LabelMap) -> Self {
-        // FIXME: Need to escape `=` and `,`
         label_map
             .0
             .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
+            .map(|(k, v)| format!("{}={}", encode(k), encode(v)))
             .collect::<Vec<String>>()
             .join(",")
     }

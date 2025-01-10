@@ -55,10 +55,12 @@ Your control server MAY discriminate requests based on these labels and only del
 For example, you may choose to identify features of the forman agent host by defining labels such as `cpu = 4`, `gpu = true` etc.
 
 Similarly, your control server may maintain multiple job queues.
-Labels allow you to assign agents to specific queues e.g. `queue = high-priority` or `queue = low-priority`.
+Labels allow you to assign agents to specific queues e.g. `queue = high-priority`, `queue = low-priority` etc.
 
 Labels are formatted as a comma-separated list of key/value pairs e.g `cpu=4,gpu=true,queue=high-priority`.
-NOTE, the order of the key/values is NOT guaranteed.
+Both keys and values will be URL-encoded so you are free to use '=' and ',' in your labels.
+The trade-off here is you need to remember to URL-decode before usage on your control server.
+The order of the key/values is NOT guaranteed.
 
 ## Concepts
 

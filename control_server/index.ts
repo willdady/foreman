@@ -32,19 +32,63 @@ const jobFactory = (): Job => {
   };
 };
 
+// Utility function for extracting labels from the x-foreman-labels header
+const parseLabelsHeader = (
+  encodedString: string,
+): Record<string, string> => {
+  const result: Record<string, string> = {};
+  const pairs = encodedString.split(",");
+  for (const pair of pairs) {
+    const [encodedKey, encodedValue] = pair.split("=");
+    const key = decodeURIComponent(encodedKey);
+    const value = decodeURIComponent(encodedValue);
+    result[key] = value;
+  }
+  return result;
+};
+
 const router = new Router();
 
 router.get("/job", (ctx) => {
   console.log("headers:", ctx.request.headers);
-  // TODO: Verify the agent id is valid and that it has permission to access this endpoint
+
+  // Parse labels from the x-foreman-labels header
+  // In a concrete implementation, you might discrimate on these labels and only return jobs matching the labels.
+  const labels = parseLabelsHeader(
+    ctx.request.headers.get("x-foreman-labels") ?? "",
+  );
+  console.log("Got labels:", labels);
+
+  // Extract token from the Authorization header.
+  // In a concrete implementation, you would need to validate the token and reject the request if invalid!
+  const token = (ctx.request.headers.get("authorization") ?? "").replace(
+    "Bearer ",
+    "",
+  );
+  console.log("Got token:", token);
+
+  // Return a job, assigning it to the requesting foreman agent.
+  // In a concrete implementation, you would mark the job as in-progress before returning it.
+  // Never return a job that is already in-progress.
   ctx.response.body = jobFactory();
 });
 
 router.put("/job/:jobId", (ctx) => {
   console.log(`Handling job response for job ${ctx.params.jobId}`);
   console.log("headers:", ctx.request.headers);
-  // TODO: Verify the agent id is valid and that it has permission to access this endpoint
-  // TODO: Update the job's status based on the response from the callback URL
+
+  const status = ctx.request.headers.get("x-foreman-job-status") as
+    | "running"
+    | "completed";
+  console.log("Got job status:", status);
+
+  const progress = parseFloat(
+    ctx.request.headers.get("x-foreman-job-progress") ?? "0.0",
+  );
+  console.log("Got job progress:", progress);
+
+  // In a concreate implementation, you would update the job's status based on the above
+  // headers and optionally perform some action based on the request body.
   ctx.response.body = "ok";
 });
 
