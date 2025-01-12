@@ -25,7 +25,7 @@ impl From<EnvVars> for Vec<String> {
     fn from(env_vars: EnvVars) -> Self {
         env_vars
             .inner()
-            .into_iter()
+            .iter()
             .map(|(k, v)| format!("{}={}", k, v))
             .collect()
     }

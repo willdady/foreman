@@ -6,7 +6,7 @@ use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 use urlencoding::encode;
 
-const CONFIG_FILE_NAME: &'static str = "foreman.toml";
+const CONFIG_FILE_NAME: &str = "foreman.toml";
 
 #[derive(Debug, Deserialize)]
 pub struct LabelMap(HashMap<String, String>);
@@ -27,6 +27,12 @@ impl From<&LabelMap> for String {
             .map(|(k, v)| format!("{}={}", encode(k), encode(v)))
             .collect::<Vec<String>>()
             .join(",")
+    }
+}
+
+impl Default for LabelMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -61,17 +67,8 @@ pub struct Settings {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let path_exists = |path: Option<String>| {
-            if let Some(_path) = path {
-                if Path::new(_path.as_str()).exists() {
-                    Some(_path)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        };
+        let path_exists =
+            |path: Option<String>| path.filter(|_path| Path::new(_path.as_str()).exists());
 
         let config_path_string = if let Ok(val) = env::var("FOREMAN_CONFIG") {
             path_exists(Some(val)).unwrap_or_else(|| {
@@ -114,7 +111,5 @@ impl Settings {
     }
 }
 
-pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
-    let settings = Settings::new().expect("Failed to load settings");
-    settings
-});
+pub static SETTINGS: LazyLock<Settings> =
+    LazyLock::new(|| Settings::new().expect("Failed to load settings"));

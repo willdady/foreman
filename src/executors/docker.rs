@@ -7,16 +7,12 @@ use crate::{
 };
 use futures::{future, stream::StreamExt};
 use log::info;
-use serde_json::Value;
 
 use super::Executor;
 
 use anyhow::{bail, Result};
 use bollard::{
-    container::{
-        AttachContainerOptions, AttachContainerResults, Config, CreateContainerOptions,
-        StartContainerOptions, StopContainerOptions, WaitContainerOptions,
-    },
+    container::{Config, CreateContainerOptions, StartContainerOptions, StopContainerOptions},
     image::{CreateImageOptions, ListImagesOptions},
     network::CreateNetworkOptions,
     secret::{ContainerCreateResponse, ContainerInspectResponse, HealthStatusEnum, PortBinding},
@@ -161,17 +157,16 @@ impl DockerExecutor {
 
     async fn stop_container(&self, container_name: &str) -> Result<()> {
         info!("Stopping container {}", container_name);
-        let stop_container_response = self
-            .docker
+        self.docker
             .stop_container(container_name, Some(StopContainerOptions { t: 0 }))
             .await?;
-        Ok(stop_container_response)
+        Ok(())
     }
 
     async fn remove_container(&self, container_name: &str) -> Result<()> {
         info!("Removing container {}", container_name);
-        let remove_container_response = self.docker.remove_container(container_name, None).await?;
-        Ok(remove_container_response)
+        self.docker.remove_container(container_name, None).await?;
+        Ok(())
     }
 
     async fn stop_and_remove_container(&self, container_name: &str) -> Result<()> {
@@ -180,47 +175,12 @@ impl DockerExecutor {
         Ok(())
     }
 
-    async fn attach_container(&self, container_name: &str) -> Result<AttachContainerResults> {
-        let options = AttachContainerOptions::<String> {
-            stdout: Some(true),
-            stderr: Some(true),
-            stream: Some(true),
-            ..Default::default()
-        };
-
-        let attach_container_results = self
-            .docker
-            .attach_container(container_name, Some(options))
-            .await?;
-        Ok(attach_container_results)
-    }
-
     async fn start_container(&self, container_name: &str) -> Result<()> {
         info!("Starting container: {}", container_name);
-        let start_container_result = self
-            .docker
+        self.docker
             .start_container(container_name, None::<StartContainerOptions<String>>)
             .await?;
-        Ok(start_container_result)
-    }
-
-    async fn wait_container(&self, container_name: &str) -> Result<i64> {
-        let wait_container_response = self
-            .docker
-            .wait_container(container_name, None::<WaitContainerOptions<String>>)
-            .collect::<Vec<_>>()
-            .await;
-        if wait_container_response.len() != 1 {
-            bail!("Unexpected wait response length");
-        }
-
-        match &wait_container_response[0] {
-            Ok(x) => Ok(x.status_code),
-            Err(e) => match e {
-                bollard::errors::Error::DockerContainerWaitError { code, .. } => Ok(*code),
-                _ => bail!("{}", e),
-            },
-        }
+        Ok(())
     }
 
     async fn inspect_container(&self, container_name: &str) -> Result<ContainerInspectResponse> {
@@ -241,38 +201,46 @@ impl DockerExecutor {
         Ok(exists)
     }
 
-    async fn run(
-        &mut self,
-        id: String,
-        image: String,
-        port: u16,
-        command: Option<&Vec<String>>,
-        body: Value,
-        env: Option<EnvVars>,
-        callback_url: String,
-        always_pull: bool,
-    ) -> Result<()> {
+    async fn run(&mut self, docker_job: &DockerJob) -> Result<()> {
+        let DockerJob {
+            id,
+            image,
+            always_pull,
+            port,
+            env,
+            command,
+            ..
+        } = docker_job;
+
         let container_name = format!("job-{}", id);
         // Pull image?
-        if always_pull {
-            self.pull(&image).await?;
+        if *always_pull {
+            self.pull(image).await?;
         } else {
-            let image_exists = self.image_exists(&image).await?;
+            let image_exists = self.image_exists(image).await?;
             if !image_exists {
                 info!("Image {} does not exist, pulling...", image);
-                self.pull(&image).await?;
+                self.pull(image).await?;
             } else {
                 info!("Image {} exists, skipping pull...", image)
             }
         }
         // Create container
         let host_port = self.port_manager.reserve_port()?;
-        self.create_container(&id, &container_name, &image, port, host_port, command, env)
-            .await?;
+        self.create_container(
+            id,
+            &container_name,
+            image,
+            *port,
+            host_port,
+            command.as_ref(),
+            env.clone(),
+        )
+        .await?;
         // Start container
         self.start_container(&container_name).await?;
         // Wait for container to become healthy
-        let container_timeout = (&*SETTINGS).docker.container_timeout;
+        let container_timeout = SETTINGS.docker.container_timeout;
         let mut ms_ellapsed = 0;
         let health_status: HealthStatusEnum = loop {
             let container_inspect_response = self.inspect_container(&container_name).await?;
@@ -332,29 +300,8 @@ impl Executor for DockerExecutor {
     // Remove if/when other variants are added.
     #[allow(irrefutable_let_patterns)]
     async fn execute(&mut self, job: Job) -> Result<()> {
-        if let Job::Docker(DockerJob {
-            id,
-            image,
-            port,
-            command,
-            body,
-            env,
-            callback_url,
-            always_pull,
-            ..
-        }) = job
-        {
-            self.run(
-                id,
-                image,
-                port,
-                command.as_ref(),
-                body,
-                env,
-                callback_url,
-                always_pull,
-            )
-            .await?;
+        if let Job::Docker(docker_job) = job {
+            self.run(&docker_job).await?;
         } else {
             bail!("Expected docker job");
         }

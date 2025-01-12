@@ -21,17 +21,13 @@ use log::{debug, error, info};
 use reqwest::StatusCode;
 use serde_json::json;
 use settings::SETTINGS;
-use simplelog;
 use tokio::{
     join,
-    sync::{
-        mpsc::{self, Sender},
-        oneshot,
-    },
+    sync::mpsc::{self},
 };
 use tracking::{get_job, update_job_status, JobStatus, JobTracker, JobTrackerCommand};
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
     format!(
         "foreman/{} ({}, {})",
@@ -118,9 +114,8 @@ async fn main() -> Result<()> {
         let mut docker_executor = DockerExecutor::new().await.unwrap();
 
         while let Some(job) = job_executor_rx.recv().await {
-            match docker_executor.execute(job).await {
-                Err(e) => error!("Error executing job: {}", e),
-                _ => {}
+            if let Err(e) = docker_executor.execute(job).await {
+                error!("Error executing job: {}", e)
             }
         }
     });
@@ -134,7 +129,7 @@ async fn main() -> Result<()> {
                     job_tracker.insert(job);
                 }
                 JobTrackerCommand::GetJob { job_id, resp } => {
-                    let result = job_tracker.get_job(&job_id).and_then(|j| Some(j.clone()));
+                    let result = job_tracker.get_job(&job_id).cloned();
                     resp.send(Ok(result))
                         .expect("Failed to send has job response over channel");
                 }
@@ -159,7 +154,7 @@ async fn main() -> Result<()> {
             "/job/:job_id",
             get(|Path(job_id): Path<String>| async move {
                 let job_opt = get_job(&job_id, &job_tracker_tx3).await;
-                if let None = job_opt {
+                if job_opt.is_none() {
                     return (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" })));
                 }
 
@@ -170,14 +165,14 @@ async fn main() -> Result<()> {
                 };
                 let Job::Docker(docker_job) = tracked_job.inner();
 
-                match tracked_job.status() {
-                    &JobStatus::Completed => {
+                match *tracked_job.status() {
+                    JobStatus::Completed => {
                          return (
                             StatusCode::FORBIDDEN,
                             Json(json!({ "error": "refusing to return job as it's status is 'completed'" })),
                         );
                     },
-                    &JobStatus::Pending => {
+                    JobStatus::Pending => {
                         if let Err(e) = update_job_status(
                             &docker_job.id,
                             JobStatus::Running,
@@ -248,7 +243,7 @@ async fn main() -> Result<()> {
 
                     // Get the job object from the JobTracker
                     let job_opt = get_job(&job_id, &job_tracker_tx4).await;
-                    if let None = job_opt {
+                    if job_opt.is_none() {
                         return (StatusCode::NOT_FOUND, "Job not found".to_string());
                     }
                     let callback_url = {
@@ -262,7 +257,7 @@ async fn main() -> Result<()> {
                     info!("Sending PUT request to callback URL {}", callback_url);
                     let http_client = reqwest::Client::new();
                     let mut headers = headers.clone();
-                    headers.insert("user-agent", HeaderValue::from_str(&*USER_AGENT).unwrap());
+                    headers.insert("user-agent", HeaderValue::from_str(&USER_AGENT).unwrap());
                     let resp = http_client
                         .put(callback_url)
                         .headers(headers)
@@ -278,7 +273,7 @@ async fn main() -> Result<()> {
                         return (StatusCode::BAD_REQUEST, error_msg);
                     }
 
-                    return (StatusCode::OK, "OK".to_string());
+                    (StatusCode::OK, "OK".to_string())
                 },
             ),
         );

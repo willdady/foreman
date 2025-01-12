@@ -65,24 +65,15 @@ impl JobTracker {
     }
 
     pub fn insert(&mut self, job: Job) {
-        match job {
-            Job::Docker(DockerJob { ref id, .. }) => {
-                let job_id = id.to_owned();
-                let tracked_job = TrackedJob {
-                    job,
-                    status: JobStatus::Pending,
-                    progress: 0.0,
-                    start_time: Duration::from_secs(0),
-                };
-
-                self.jobs.insert(job_id, Arc::new(Mutex::new(tracked_job)));
-            }
-            _ => panic!("Unsupported job type"),
-        }
-    }
-
-    pub fn has_job(&self, id: &str) -> bool {
-        self.jobs.contains_key(id)
+        let Job::Docker(DockerJob { ref id, .. }) = job;
+        let job_id = id.to_owned();
+        let tracked_job = TrackedJob {
+            job,
+            status: JobStatus::Pending,
+            progress: 0.0,
+            start_time: Duration::from_secs(0),
+        };
+        self.jobs.insert(job_id, Arc::new(Mutex::new(tracked_job)));
     }
 
     pub fn get_job(&self, id: &str) -> Option<&Arc<Mutex<TrackedJob>>> {
@@ -134,12 +125,11 @@ pub async fn get_job(
     .await
     .expect("Failed sending GetJob command");
 
-    let job_opt = resp_rx
+    resp_rx
         .await
         .expect("Failed to get job from channel")
         .ok()
-        .flatten();
-    job_opt
+        .flatten()
 }
 
 pub async fn update_job_status(
