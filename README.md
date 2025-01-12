@@ -197,9 +197,16 @@ A container becomes eligible for removal once it's status changes to `completed`
 
 ## Development
 
-A reference control server is defined in `control_server`.
+Build the test job image:
 
-To run the server, `cd` into the `control_server` directory and run:
+```
+cd examples/test_job_image
+docker build -t foreman-test-job-image:latest .
+```
+
+A reference control server is defined in `examples/control_server`.
+
+To run the server, `cd` into the `examples/control_server` directory and run:
 
 ```bash
 deno run -A index.ts

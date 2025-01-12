@@ -17,15 +17,14 @@ const jobFactory = (): Job => {
   const id = crypto.randomUUID();
   return {
     id: crypto.randomUUID(),
-    image: "vs-test-image:latest",
-    command: [
-      "/bin/sh",
-      "-c",
-      "echo 'I am a fake job simulating some work' && sleep 60",
-    ],
+    image: "foreman-test-job-image:latest",
     port: 80,
     body: {
-      data: "Hello, world!",
+      values: [
+        5,
+        10,
+        15,
+      ],
     },
     callbackUrl: `http://localhost:${PORT}/job/${id}`,
     alwaysPull: false,
@@ -50,6 +49,7 @@ const parseLabelsHeader = (
 const router = new Router();
 
 router.get("/job", (ctx) => {
+  console.log("--- GET /job ---");
   console.log("headers:", ctx.request.headers);
 
   // Parse labels from the x-foreman-labels header
@@ -74,6 +74,7 @@ router.get("/job", (ctx) => {
 });
 
 router.put("/job/:jobId", (ctx) => {
+  console.log("--- PUT /job/:jobId ---");
   console.log(`Handling job response for job ${ctx.params.jobId}`);
   console.log("headers:", ctx.request.headers);
 
