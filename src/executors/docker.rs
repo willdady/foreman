@@ -8,7 +8,7 @@ use crate::{
 use futures::{future, stream::StreamExt};
 use log::info;
 
-use super::Executor;
+use super::JobExecutor;
 
 use anyhow::{bail, Result};
 use bollard::{
@@ -298,7 +298,7 @@ impl DockerExecutor {
     }
 }
 
-impl Executor for DockerExecutor {
+impl JobExecutor for DockerExecutor {
     // Allowing irrefutable_let_patterns as currently there is only one Job variant.
     // Remove if/when other variants are added.
     #[allow(irrefutable_let_patterns)]
@@ -308,6 +308,12 @@ impl Executor for DockerExecutor {
         } else {
             bail!("Expected docker job");
         }
+        Ok(())
+    }
+
+    async fn stop(&mut self, job_id: &str) -> Result<()> {
+        let container_name = format!("job-{}", job_id);
+        self.stop_container(&container_name).await?;
         Ok(())
     }
 }

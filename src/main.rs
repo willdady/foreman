@@ -15,7 +15,7 @@ use axum::{
     routing::{get, put},
     Json, Router,
 };
-use executors::{DockerExecutor, Executor};
+use executors::{DockerExecutor, JobExecutor, JobExecutorCommand};
 use job::Job;
 use log::{debug, error, info};
 use reqwest::StatusCode;
@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     println!("{:?}", settings);
 
     // Job executor channel
-    let (job_executor_tx, mut job_executor_rx) = mpsc::channel::<Job>(32);
+    let (job_executor_tx, mut job_executor_rx) = mpsc::channel::<JobExecutorCommand>(32);
 
     // Job tracker channel
     let (job_tracker_tx, mut job_tracker_rx) = mpsc::channel::<JobTrackerCommand>(32);
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
                         .expect("Failed to send job to tracker channel");
 
                     job_executor_tx
-                        .send(job)
+                        .send(JobExecutorCommand::Execute { job })
                         .await
                         .expect("Failed to send job to executor channel");
                 }
@@ -111,11 +111,22 @@ async fn main() -> Result<()> {
 
     // Manager task with exclusive access to Docker
     let job_manager = tokio::spawn(async move {
-        let mut docker_executor = DockerExecutor::new().await.unwrap();
+        let mut executor = DockerExecutor::new()
+            .await
+            .expect("Failed to create Docker executor");
 
-        while let Some(job) = job_executor_rx.recv().await {
-            if let Err(e) = docker_executor.execute(job).await {
-                error!("Error executing job: {}", e)
+        while let Some(command) = job_executor_rx.recv().await {
+            match command {
+                JobExecutorCommand::Execute { job } => {
+                    if let Err(e) = executor.execute(job).await {
+                        error!("Error executing job: {}", e)
+                    }
+                }
+                JobExecutorCommand::Stop { job_id } => {
+                    if let Err(e) = executor.stop(&job_id).await {
+                        error!("Error stopping job: {}", e)
+                    }
+                }
             }
         }
     });
