@@ -20,6 +20,9 @@ hostname = "YOUR_HOSTNAME_HERE"
 # Network name to use for containers created by foreman
 # network_name = "foreman"
 
+# How long to wait for a job to report a 'completed' status before stopping the job
+# job_completion_timeout = 10000
+
 # Additional hosts to add to containers e.g. `extra_hosts = ["host.docker.internal:host-gateway"]`
 # extra_hosts = []
 
@@ -44,6 +47,3 @@ hostname = "YOUR_HOSTNAME_HERE"
 
 # End port for container mapping
 # end_port = 65535
-
-# How long to wait for a container to report healthy status
-# container_timeout = 10000

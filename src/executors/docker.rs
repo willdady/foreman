@@ -28,11 +28,9 @@ pub struct DockerExecutor {
 impl DockerExecutor {
     pub async fn new() -> Result<Self> {
         let docker = Docker::connect_with_local_defaults()?;
-        // TODO: Ping docker
 
         let port_manager = PortManager::new(None, None)?;
 
-        let network_name = "viewscreen";
         let _self = DockerExecutor {
             docker,
             port_manager,

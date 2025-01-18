@@ -48,6 +48,7 @@ pub struct Core {
     pub poll_timeout: u16,
     pub extra_hosts: Option<Vec<String>>,
     pub labels: Option<LabelMap>,
+    pub job_completion_timeout: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,7 +57,6 @@ pub struct Docker {
     pub url: Option<String>,
     pub start_port: u16,
     pub end_port: u16,
-    pub container_timeout: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,13 +94,13 @@ impl Settings {
         };
 
         let s = Config::builder()
-            .set_default("core.poll_frequency", 5000)?
-            .set_default("core.poll_timeout", 30000)?
+            .set_default("core.poll_frequency", 5_000)?
+            .set_default("core.poll_timeout", 30_000)?
             .set_default("core.port", 3000)?
             .set_default("core.network_name", "foreman")?
+            .set_default("core.job_completion_timeout", 10_000)?
             .set_default("docker.start_port", 49152)?
             .set_default("docker.end_port", 65535)?
-            .set_default("docker.container_timeout", 10000)?
             .add_source(File::with_name(&config_path_string).required(false))
             .add_source(
                 Environment::with_prefix("foreman")

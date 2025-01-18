@@ -10,7 +10,10 @@ use log::info;
 use serde::Deserialize;
 use tokio::sync::{mpsc::Sender, oneshot};
 
-use crate::job::{DockerJob, Job};
+use crate::{
+    job::{DockerJob, Job},
+    settings::SETTINGS,
+};
 
 #[derive(Debug, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "UPPERCASE")]
@@ -114,7 +117,7 @@ impl JobTracker {
     /// Returns a `Vec<String>` containing the IDs of any running jobs which have timed out.
     pub fn get_timed_out_job_ids(&self) -> Vec<String> {
         let now = SystemTime::now();
-        let job_timeout = Duration::from_secs(10); // FIXME: Make configurable via settings
+        let job_completion_timeout = Duration::from_millis(SETTINGS.core.job_completion_timeout);
 
         self.jobs
             .iter()
@@ -123,7 +126,7 @@ impl JobTracker {
                     let start_time = now.checked_sub(locked_job.start_time)?;
                     let elapsed = now.duration_since(start_time).ok()?;
 
-                    if locked_job.status == JobStatus::Running && elapsed > job_timeout {
+                    if locked_job.status == JobStatus::Running && elapsed > job_completion_timeout {
                         Some(id.clone())
                     } else {
                         None
