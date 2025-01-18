@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     str::FromStr,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::{bail, Ok, Result};
@@ -92,6 +92,50 @@ impl JobTracker {
             return Ok(());
         }
         bail!("Invalid job id");
+    }
+
+    /// Returns a `Vec<String>` containing the IDs of all completed jobs.
+    pub fn get_completed_job_ids(&self) -> Vec<String> {
+        self.jobs
+            .iter()
+            .filter_map(|(_, tracked_job)| {
+                tracked_job.lock().ok().and_then(|locked_job| {
+                    if locked_job.status == JobStatus::Completed {
+                        let Job::Docker(docker_job) = &locked_job.job;
+                        Some(docker_job.id.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Returns a `Vec<String>` containing the IDs of any running jobs which have timed out.
+    pub fn get_timed_out_job_ids(&self) -> Vec<String> {
+        let now = SystemTime::now();
+        let job_timeout = Duration::from_secs(10); // FIXME: Make configurable via settings
+
+        self.jobs
+            .iter()
+            .filter_map(|(id, tracked_job)| {
+                tracked_job.lock().ok().and_then(|locked_job| {
+                    let start_time = now.checked_sub(locked_job.start_time)?;
+                    let elapsed = now.duration_since(start_time).ok()?;
+
+                    if locked_job.status == JobStatus::Running && elapsed > job_timeout {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Deletes a tracked job by ID
+    pub fn delete_tracked_job(&mut self, id: &str) {
+        self.jobs.remove(id);
     }
 }
 

@@ -197,19 +197,37 @@ A container becomes eligible for removal once it's status changes to `completed`
 
 ## Development
 
-Build the test job image:
+### 1. Build the Test image
+
+Build the test job image so it is available on your local machine.
+This image is used by jobs produced by the reference control server (see next step).
 
 ```
 cd examples/test_job_image
 docker build -t foreman-test-job-image:latest .
 ```
 
-A reference control server is defined in `examples/control_server`.
+### 2. Run the reference control server
+
+A reference control server, using Typescript and Deno, is defined in `examples/control_server`.
 
 To run the server, `cd` into the `examples/control_server` directory and run:
 
 ```bash
 deno run -A index.ts
+```
+
+### 3. Run foreman
+
+Update your `foreman.toml` file to contain the following configuration.
+This allows code running inside the test image to reach foreman process running on your host machine.
+
+```toml
+[core]
+url = 'http://localhost:8888/job'
+token = 'MY-SUPER-SECRET-TOKEN'
+hostname = "host.docker.internal"
+extra_hosts = ["host.docker.internal:host-gateway"]
 ```
 
 In a separate terminal, start foreman.

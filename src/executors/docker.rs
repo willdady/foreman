@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use crate::{
     job::{DockerJob, EnvVars, Job},
@@ -15,7 +15,7 @@ use bollard::{
     container::{Config, CreateContainerOptions, StartContainerOptions, StopContainerOptions},
     image::{CreateImageOptions, ListImagesOptions},
     network::CreateNetworkOptions,
-    secret::{ContainerCreateResponse, ContainerInspectResponse, HealthStatusEnum, PortBinding},
+    secret::{ContainerCreateResponse, ContainerInspectResponse, PortBinding},
     Docker,
 };
 
@@ -169,12 +169,6 @@ impl DockerExecutor {
         Ok(())
     }
 
-    async fn stop_and_remove_container(&self, container_name: &str) -> Result<()> {
-        self.stop_container(container_name).await?;
-        self.remove_container(container_name).await?;
-        Ok(())
-    }
-
     async fn start_container(&self, container_name: &str) -> Result<()> {
         info!("Starting container: {}", container_name);
         self.docker
@@ -239,61 +233,6 @@ impl DockerExecutor {
         .await?;
         // Start container
         self.start_container(&container_name).await?;
-        // FIXME: We don't really need to wait for the container to become healthy because a container will GET a job when it's ready.
-        // We do still need to kill the container once it returns a 'completed' status OR a timeout is reached!
-        // ---
-        // Wait for container to become healthy
-        // let container_timeout = SETTINGS.docker.container_timeout;
-        // let mut ms_ellapsed = 0;
-        // let health_status: HealthStatusEnum = loop {
-        //     let container_inspect_response = self.inspect_container(&container_name).await?;
-        //     let health_status = container_inspect_response
-        //         .state
-        //         .and_then(|state| state.health)
-        //         .and_then(|health| health.status);
-        //     if health_status.is_none() {
-        //         break HealthStatusEnum::NONE;
-        //     }
-
-        //     let health_status = health_status.unwrap();
-        //     if health_status == HealthStatusEnum::STARTING {
-        //         info!("Waiting for container {} to start...", container_name);
-        //         tokio::time::sleep(Duration::from_millis(500)).await;
-        //         ms_ellapsed += 500;
-        //         if ms_ellapsed >= container_timeout {
-        //             break health_status;
-        //         }
-        //     } else {
-        //         break health_status;
-        //     }
-        // };
-        // // Conditionally proceed based on health status
-        // match health_status {
-        //     HealthStatusEnum::HEALTHY => {
-        //         info!("Container {} is healthy!", container_name);
-        //     }
-        //     HealthStatusEnum::STARTING => {
-        //         self.stop_and_remove_container(&container_name).await?;
-        //         self.port_manager.release_port(host_port)?;
-        //         bail!(
-        //             "Timeout waiting for container {} to pass health check",
-        //             container_name
-        //         );
-        //     }
-        //     HealthStatusEnum::UNHEALTHY => {
-        //         self.stop_and_remove_container(&container_name).await?;
-        //         self.port_manager.release_port(host_port)?;
-        //         bail!("Container {} is unhealthy", container_name);
-        //     }
-        //     HealthStatusEnum::NONE | HealthStatusEnum::EMPTY => {
-        //         self.stop_and_remove_container(&container_name).await?;
-        //         self.port_manager.release_port(host_port)?;
-        //         bail!("Container {} does not have a health status", container_name);
-        //     }
-        // }
-        // // Remove container
-        // self.stop_and_remove_container(&container_name).await?;
-        // self.port_manager.release_port(host_port)?;
         Ok(())
     }
 }

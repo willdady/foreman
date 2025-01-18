@@ -1,5 +1,6 @@
 import { Application, Router } from "@oak/oak";
 
+// If you change this, remember to update `core.url` in your `foreman.toml` file.
 const PORT = 8888;
 
 interface Job {

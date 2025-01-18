@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
 
     // Control server poller
     let job_tracker_tx2 = job_tracker_tx.clone();
+    let job_executor_tx2 = job_executor_tx.clone();
     let control_server_poller = tokio::spawn(async move {
         // Set default headers
         let mut default_headers = HeaderMap::new();
@@ -92,7 +93,7 @@ async fn main() -> Result<()> {
                         .await
                         .expect("Failed to send job to tracker channel");
 
-                    job_executor_tx
+                    job_executor_tx2
                         .send(JobExecutorCommand::Execute { job })
                         .await
                         .expect("Failed to send job to executor channel");
@@ -132,28 +133,58 @@ async fn main() -> Result<()> {
     });
 
     // Job tracking task for managing job state
+    let job_executor_tx3 = job_executor_tx.clone();
     let job_tracking = tokio::spawn(async move {
         let mut job_tracker = JobTracker::new();
-        while let Some(command) = job_tracker_rx.recv().await {
-            match command {
-                JobTrackerCommand::Insert { job } => {
-                    job_tracker.insert(job);
+        loop {
+            // Process commands received from the job tracker channel
+            if let Some(command) = job_tracker_rx.recv().await {
+                match command {
+                    JobTrackerCommand::Insert { job } => {
+                        job_tracker.insert(job);
+                    }
+                    JobTrackerCommand::GetJob { job_id, resp } => {
+                        let result = job_tracker.get_job(&job_id).cloned();
+                        resp.send(Ok(result))
+                            .expect("Failed to send has job response over channel");
+                    }
+                    JobTrackerCommand::UpdateStatus {
+                        job_id,
+                        status,
+                        progress,
+                        resp,
+                    } => {
+                        let result = job_tracker.update_status(&job_id, status, progress);
+                        resp.send(result)
+                            .expect("Failed to send update status response over channel");
+                    }
                 }
-                JobTrackerCommand::GetJob { job_id, resp } => {
-                    let result = job_tracker.get_job(&job_id).cloned();
-                    resp.send(Ok(result))
-                        .expect("Failed to send has job response over channel");
-                }
-                JobTrackerCommand::UpdateStatus {
-                    job_id,
-                    status,
-                    progress,
-                    resp,
-                } => {
-                    let result = job_tracker.update_status(&job_id, status, progress);
-                    resp.send(result)
-                        .expect("Failed to send update status response over channel");
-                }
+            }
+            // Send stop command to the job executor for any completed jobs
+            let completed_job_ids = job_tracker.get_completed_job_ids();
+            for job_id in completed_job_ids {
+                info!("Stopping completed job: {}", job_id);
+                let command = JobExecutorCommand::Stop {
+                    job_id: job_id.clone(),
+                };
+                job_executor_tx3
+                    .send(command)
+                    .await
+                    .expect("Failed to send stop command to job executor for completed job ");
+                job_tracker.delete_tracked_job(&job_id);
+            }
+            // Send stop command to the job executor for any timed-out jobs
+            let timed_out_job_ids = job_tracker.get_timed_out_job_ids();
+            for job_id in timed_out_job_ids {
+                info!("Stopping timed-out job: {}", job_id);
+                let command = JobExecutorCommand::Stop {
+                    job_id: job_id.clone(),
+                };
+                job_executor_tx3
+                    .send(command)
+                    .await
+                    .expect("Failed to send stop command to job executor for timed-out job");
+                job_tracker.delete_tracked_job(&job_id);
             }
         }
     });
@@ -241,17 +272,6 @@ async fn main() -> Result<()> {
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(0.0);
 
-                    // Update the job status in the JobTracker.
-                    if let Err(e) =
-                        update_job_status(&job_id, status, progress, &job_tracker_tx4).await
-                    {
-                        error!("Error updating job status: {}", e);
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to update job status".to_string(),
-                        );
-                    };
-
                     // Get the job object from the JobTracker
                     let job_opt = get_job(&job_id, &job_tracker_tx4).await;
                     if job_opt.is_none() {
@@ -277,12 +297,21 @@ async fn main() -> Result<()> {
                         .await;
                     if let std::result::Result::Ok(resp) = resp {
                         let status_code = resp.status();
-                        info!("Status code {}", status_code);
+                        info!("- Status code {}", status_code);
                     } else {
                         let error_msg = format!("Failed to send PUT request: {:?}", resp);
                         error!("{}", error_msg);
                         return (StatusCode::BAD_REQUEST, error_msg);
                     }
+
+                    // Update the job status in the JobTracker.
+                    if let Err(e) = update_job_status(&job_id, status, progress, &job_tracker_tx4).await {
+                        error!("Error updating job status: {}", e);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to update job status".to_string(),
+                        );
+                    };
 
                     (StatusCode::OK, "OK".to_string())
                 },
