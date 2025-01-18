@@ -93,6 +93,9 @@ It can be anything from running a script to deploying an application.
 An executor is responsible for executing jobs on behalf of a foreman agent.
 
 Foreman manages Docker as it's job executor.
+A custom bridge network is created on start-up which all containers created by foreman are added to.
+By default the network is named `foreman`.
+This can be changed via the `core.network_name` configuration option.
 
 ## Sequence diagram
 
@@ -220,7 +223,7 @@ deno run -A index.ts
 ### 3. Run foreman
 
 Update your `foreman.toml` file to contain the following configuration.
-This allows code running inside the test image to reach foreman process running on your host machine.
+This allows code running inside the test image to reach the foreman process running on your host machine.
 
 ```toml
 [core]
