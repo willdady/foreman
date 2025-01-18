@@ -17,6 +17,9 @@ hostname = "YOUR_HOSTNAME_HERE"
 # Port on which to expose foreman
 # port = 3000
 
+# Network name to use for containers created by foreman
+# network_name = "foreman"
+
 # Additional hosts to add to containers e.g. `extra_hosts = ["host.docker.internal:host-gateway"]`
 # extra_hosts = []
 

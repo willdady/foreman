@@ -1,6 +1,6 @@
 # foreman
 
-Foreman is a self-hostable Rust-based agent which retrieves jobs from a control server and executes them inside a containerised environment.
+Foreman is a Rust based job scheduler and executor agent.
 
 ## Features
 

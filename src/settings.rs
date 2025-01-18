@@ -42,6 +42,7 @@ pub struct Core {
     pub url: String,
     pub hostname: String,
     pub port: u16,
+    pub network_name: String,
     pub token: String,
     pub poll_frequency: u16,
     pub poll_timeout: u16,
@@ -96,6 +97,7 @@ impl Settings {
             .set_default("core.poll_frequency", 5000)?
             .set_default("core.poll_timeout", 30000)?
             .set_default("core.port", 3000)?
+            .set_default("core.network_name", "foreman")?
             .set_default("docker.start_port", 49152)?
             .set_default("docker.end_port", 65535)?
             .set_default("docker.container_timeout", 10000)?

@@ -22,7 +22,6 @@ use bollard::{
 #[derive(Debug)]
 pub struct DockerExecutor {
     docker: Docker,
-    network_name: String,
     port_manager: PortManager,
 }
 
@@ -36,7 +35,6 @@ impl DockerExecutor {
         let network_name = "viewscreen";
         let _self = DockerExecutor {
             docker,
-            network_name: network_name.to_string(),
             port_manager,
         };
         _self.create_network().await?;
@@ -65,19 +63,22 @@ impl DockerExecutor {
 
     async fn create_network(&self) -> Result<()> {
         let networks = self.docker.list_networks::<String>(None).await?;
+
+        let network_name = &SETTINGS.core.network_name;
+
         let network_exists = networks
             .iter()
-            .any(|n| n.name == Some(self.network_name.to_string()));
+            .any(|n| n.name == Some(network_name.to_string()));
         if !network_exists {
             let network_config = CreateNetworkOptions::<&str> {
-                name: &self.network_name,
+                name: &network_name,
                 driver: "bridge",
                 enable_ipv6: false,
                 ..Default::default()
             };
 
             self.docker.create_network(network_config).await?;
-            info!("Created network: {}", self.network_name);
+            info!("Created network: {}", network_name);
         }
         Ok(())
     }
@@ -141,7 +142,7 @@ impl DockerExecutor {
             exposed_ports: Some(exposed_ports),
             host_config: Some(bollard::service::HostConfig {
                 port_bindings: Some(port_bindings),
-                network_mode: Some(self.network_name.clone()),
+                network_mode: Some(SETTINGS.core.network_name.clone()),
                 extra_hosts,
                 ..Default::default()
             }),
