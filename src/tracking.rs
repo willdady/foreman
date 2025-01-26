@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::{bail, Ok, Result};
-use log::info;
 use serde::Deserialize;
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -21,6 +20,7 @@ pub enum JobStatus {
     Pending,
     Running,
     Completed,
+    Stopped,
 }
 
 impl FromStr for JobStatus {
@@ -32,6 +32,7 @@ impl FromStr for JobStatus {
             "PENDING" => JobStatus::Pending,
             "RUNNING" => JobStatus::Running,
             "COMPLETED" => JobStatus::Completed,
+            "STOPPED" => JobStatus::Stopped,
             _ => bail!("Unknown job status"),
         };
         Ok(status)
@@ -43,7 +44,8 @@ pub struct TrackedJob {
     job: Job,
     status: JobStatus,
     progress: f64,
-    start_time: Duration,
+    start_time: SystemTime,
+    stop_time: Option<SystemTime>,
 }
 
 impl TrackedJob {
@@ -74,7 +76,8 @@ impl JobTracker {
             job,
             status: JobStatus::Pending,
             progress: 0.0,
-            start_time: Duration::from_secs(0),
+            start_time: SystemTime::now(),
+            stop_time: None,
         };
         self.jobs.insert(job_id, Arc::new(Mutex::new(tracked_job)));
     }
@@ -83,15 +86,22 @@ impl JobTracker {
         self.jobs.get(id)
     }
 
-    pub fn update_status(&mut self, id: &str, status: JobStatus, progress: f64) -> Result<()> {
+    pub fn update_status(
+        &mut self,
+        id: &str,
+        status: JobStatus,
+        progress: Option<f64>,
+    ) -> Result<()> {
+        // TODO: Prevent transition between certain states e.g., from Completed to Running is invalid
         if let Some(tracked_job) = self.jobs.get(id) {
             let mut tracked_job = tracked_job.lock().unwrap();
-            info!(
-                "Updating job {} with to status {:?} and progress {:.2}",
-                id, status, progress
-            );
+            if status == JobStatus::Completed {
+                tracked_job.stop_time = Some(SystemTime::now());
+            }
             tracked_job.status = status;
-            tracked_job.progress = progress;
+            if let Some(progress) = progress {
+                tracked_job.progress = progress;
+            }
             return Ok(());
         }
         bail!("Invalid job id");
@@ -123,8 +133,7 @@ impl JobTracker {
             .iter()
             .filter_map(|(id, tracked_job)| {
                 tracked_job.lock().ok().and_then(|locked_job| {
-                    let start_time = now.checked_sub(locked_job.start_time)?;
-                    let elapsed = now.duration_since(start_time).ok()?;
+                    let elapsed = now.duration_since(locked_job.start_time).ok()?;
 
                     if locked_job.status == JobStatus::Running && elapsed > job_completion_timeout {
                         Some(id.clone())
@@ -153,8 +162,14 @@ pub enum JobTrackerCommand {
     UpdateStatus {
         job_id: String,
         status: JobStatus,
-        progress: f64,
+        progress: Option<f64>,
         resp: JobTrackerCommandResponder<()>,
+    },
+    GetTimedOutJobIds {
+        resp: JobTrackerCommandResponder<Vec<String>>,
+    },
+    GetCompletedJobIds {
+        resp: JobTrackerCommandResponder<Vec<String>>,
     },
 }
 
@@ -182,7 +197,7 @@ pub async fn get_job(
 pub async fn update_job_status(
     job_id: &str,
     status: JobStatus,
-    progress: f64,
+    progress: Option<f64>,
     tx: &Sender<JobTrackerCommand>,
 ) -> Result<()> {
     let (resp_tx, resp_rx) = oneshot::channel();
@@ -199,6 +214,24 @@ pub async fn update_job_status(
         bail!("Error updating job status: {}", e);
     };
     Ok(())
+}
+
+pub async fn get_timed_out_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec<String>> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::GetTimedOutJobIds { resp: resp_tx })
+        .await
+        .expect("Failed sending GetTimedOutJobIds command");
+
+    resp_rx.await.expect("Failed to get job from channel").ok()
+}
+
+pub async fn get_completed_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec<String>> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::GetCompletedJobIds { resp: resp_tx })
+        .await
+        .expect("Failed sending GetCompletedJobIds command");
+
+    resp_rx.await.expect("Failed to get job from channel").ok()
 }
 
 #[cfg(test)]

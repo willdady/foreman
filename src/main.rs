@@ -25,7 +25,7 @@ use tokio::{
     join,
     sync::mpsc::{self},
 };
-use tracking::{get_job, update_job_status, JobStatus, JobTracker, JobTrackerCommand};
+use tracking::{JobStatus, JobTracker, JobTrackerCommand};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
     // Control server poller
     let job_tracker_tx2 = job_tracker_tx.clone();
     let job_executor_tx2 = job_executor_tx.clone();
-    let control_server_poller = tokio::spawn(async move {
+    let control_server_poller_task = tokio::spawn(async move {
         // Set default headers
         let mut default_headers = HeaderMap::new();
         if let Some(labels) = &settings.core.labels {
@@ -111,7 +111,7 @@ async fn main() -> Result<()> {
     });
 
     // Manager task with exclusive access to Docker
-    let job_manager = tokio::spawn(async move {
+    let job_manager_task = tokio::spawn(async move {
         let mut executor = DockerExecutor::new()
             .await
             .expect("Failed to create Docker executor");
@@ -133,8 +133,7 @@ async fn main() -> Result<()> {
     });
 
     // Job tracking task for managing job state
-    let job_executor_tx3 = job_executor_tx.clone();
-    let job_tracking = tokio::spawn(async move {
+    let job_tracking_task = tokio::spawn(async move {
         let mut job_tracker = JobTracker::new();
         loop {
             // Process commands received from the job tracker channel
@@ -158,44 +157,81 @@ async fn main() -> Result<()> {
                         resp.send(result)
                             .expect("Failed to send update status response over channel");
                     }
+                    JobTrackerCommand::GetCompletedJobIds { resp } => {
+                        let completed_job_ids = job_tracker.get_completed_job_ids();
+                        resp.send(Ok(completed_job_ids))
+                            .expect("Failed to send completed job ids response over channel");
+                    }
+                    JobTrackerCommand::GetTimedOutJobIds { resp } => {
+                        let timed_out_job_ids = job_tracker.get_timed_out_job_ids();
+                        resp.send(Ok(timed_out_job_ids))
+                            .expect("Failed to send timed out job ids response over channel");
+                    }
                 }
-            }
-            // Send stop command to the job executor for any completed jobs
-            let completed_job_ids = job_tracker.get_completed_job_ids();
-            for job_id in completed_job_ids {
-                info!("Stopping completed job: {}", job_id);
-                let command = JobExecutorCommand::Stop {
-                    job_id: job_id.clone(),
-                };
-                job_executor_tx3
-                    .send(command)
-                    .await
-                    .expect("Failed to send stop command to job executor for completed job ");
-                job_tracker.delete_tracked_job(&job_id);
-            }
-            // Send stop command to the job executor for any timed-out jobs
-            let timed_out_job_ids = job_tracker.get_timed_out_job_ids();
-            for job_id in timed_out_job_ids {
-                info!("Stopping timed-out job: {}", job_id);
-                let command = JobExecutorCommand::Stop {
-                    job_id: job_id.clone(),
-                };
-                job_executor_tx3
-                    .send(command)
-                    .await
-                    .expect("Failed to send stop command to job executor for timed-out job");
-                job_tracker.delete_tracked_job(&job_id);
             }
         }
     });
 
+    // Job lifecycle task coordinates between job tracker and job executor
     let job_tracker_tx3 = job_tracker_tx.clone();
+    let job_executor_tx3 = job_executor_tx.clone();
+    let job_lifecycle_task =
+        tokio::spawn(async move {
+            loop {
+                // Send stop command to the job executor for any completed jobs
+                let completed_job_ids = tracking::get_completed_job_ids(&job_tracker_tx3).await;
+                if let Some(completed_job_ids) = completed_job_ids {
+                    for job_id in completed_job_ids {
+                        info!("Sending 'Stop' command for completed job: {}", job_id);
+                        let command = JobExecutorCommand::Stop {
+                            job_id: job_id.clone(),
+                        };
+                        job_executor_tx3.send(command).await.expect(
+                            "Failed to send stop command to job executor for completed job ",
+                        );
+                        tracking::update_job_status(
+                            &job_id,
+                            JobStatus::Stopped,
+                            None,
+                            &job_tracker_tx3,
+                        )
+                        .await
+                        .expect("Failed to update job status to 'stopped' for completed job");
+                    }
+                }
+                // Send stop command to the job executor for any timed-out jobs
+                let timed_out_job_ids = tracking::get_timed_out_job_ids(&job_tracker_tx3).await;
+                if let Some(timed_out_job_ids) = timed_out_job_ids {
+                    for job_id in timed_out_job_ids {
+                        info!("Sending 'Stop' command for timed-out job: {}", job_id);
+                        let command = JobExecutorCommand::Stop {
+                            job_id: job_id.clone(),
+                        };
+                        job_executor_tx3.send(command).await.expect(
+                            "Failed to send stop command to job executor for timed-out job",
+                        );
+                        tracking::update_job_status(
+                            &job_id,
+                            JobStatus::Stopped,
+                            None,
+                            &job_tracker_tx3,
+                        )
+                        .await
+                        .expect("Failed to update job status to 'stopped' for timed-out job");
+                    }
+                }
+                // Sleep for a while before checking again
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        });
+
     let job_tracker_tx4 = job_tracker_tx.clone();
+    let job_tracker_tx5 = job_tracker_tx.clone();
     let app = Router::new()
         .route(
             "/job/:job_id",
             get(|Path(job_id): Path<String>| async move {
-                let job_opt = get_job(&job_id, &job_tracker_tx3).await;
+                let job_opt = tracking::get_job(&job_id, &job_tracker_tx4).await;
                 if job_opt.is_none() {
                     return (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" })));
                 }
@@ -215,11 +251,11 @@ async fn main() -> Result<()> {
                         );
                     },
                     JobStatus::Pending => {
-                        if let Err(e) = update_job_status(
+                        if let Err(e) = tracking::update_job_status(
                             &docker_job.id,
                             JobStatus::Running,
-                            0.0,
-                            &job_tracker_tx3,
+                            Some(0.0),
+                            &job_tracker_tx4,
                         )
                         .await {
                             error!("Failed to update job status: {}", e);
@@ -273,7 +309,7 @@ async fn main() -> Result<()> {
                         .unwrap_or(0.0);
 
                     // Get the job object from the JobTracker
-                    let job_opt = get_job(&job_id, &job_tracker_tx4).await;
+                    let job_opt = tracking::get_job(&job_id, &job_tracker_tx5).await;
                     if job_opt.is_none() {
                         return (StatusCode::NOT_FOUND, "Job not found".to_string());
                     }
@@ -305,7 +341,7 @@ async fn main() -> Result<()> {
                     }
 
                     // Update the job status in the JobTracker.
-                    if let Err(e) = update_job_status(&job_id, status, progress, &job_tracker_tx4).await {
+                    if let Err(e) = tracking::update_job_status(&job_id, status, Some(progress), &job_tracker_tx5).await {
                         error!("Error updating job status: {}", e);
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -318,12 +354,16 @@ async fn main() -> Result<()> {
             ),
         );
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", settings.core.port))
-        .await
-        .unwrap(); // FIXME: Remove unwrap
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", settings.core.port)).await?;
     let server = axum::serve(listener, app);
 
-    let _ = join!(control_server_poller, job_manager, job_tracking, server);
+    let _ = join!(
+        control_server_poller_task,
+        job_manager_task,
+        job_tracking_task,
+        job_lifecycle_task,
+        server
+    );
 
     Ok(())
 }
