@@ -69,7 +69,7 @@ impl DockerExecutor {
             .any(|n| n.name == Some(network_name.to_string()));
         if !network_exists {
             let network_config = CreateNetworkOptions::<&str> {
-                name: &network_name,
+                name: network_name,
                 driver: "bridge",
                 enable_ipv6: false,
                 ..Default::default()
@@ -252,6 +252,12 @@ impl JobExecutor for DockerExecutor {
     async fn stop(&mut self, job_id: &str) -> Result<()> {
         let container_name = format!("job-{}", job_id);
         self.stop_container(&container_name).await?;
+        Ok(())
+    }
+
+    async fn remove(&mut self, job_id: &str) -> Result<()> {
+        let container_name = format!("job-{}", job_id);
+        self.remove_container(&container_name).await?;
         Ok(())
     }
 }
