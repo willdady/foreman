@@ -81,8 +81,6 @@ At a high level, a control server is a responsible for the following:
 The implementation of a control server is not within the scope of this project, though a reference implementation is included for development purposes.
 See the Development section below for more information.
 
-TODO - publish an OpenAPI spec
-
 ### Job
 
 A job defines a single task that needs to be executed.
@@ -115,7 +113,9 @@ sequenceDiagram
     E->>F: PUT /job/<job-id>
     F->>CS: PUT /job/<job-id>
     CS-->>F: OK
-    F->>E: Stop and remove container
+    F->>E: Stop container
+    F->>F: Wait
+    F->>E: Remove container
 ```
 
 ## Job schema
@@ -220,7 +220,7 @@ To run the server, `cd` into the `examples/control_server` directory and run:
 deno run -A index.ts
 ```
 
-### 3. Run foreman
+### 3. Configure foreman
 
 Update your `foreman.toml` file to contain the following configuration.
 This allows code running inside the test image to reach the foreman process running on your host machine.
@@ -232,6 +232,8 @@ token = 'MY-SUPER-SECRET-TOKEN'
 hostname = "host.docker.internal"
 extra_hosts = ["host.docker.internal:host-gateway"]
 ```
+
+### 4. Run foreman
 
 In a separate terminal, start foreman.
 
