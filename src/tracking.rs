@@ -21,6 +21,7 @@ pub enum JobStatus {
     Running,
     Completed,
     Stopped,
+    Finished,
 }
 
 impl FromStr for JobStatus {
@@ -33,6 +34,7 @@ impl FromStr for JobStatus {
             "RUNNING" => JobStatus::Running,
             "COMPLETED" => JobStatus::Completed,
             "STOPPED" => JobStatus::Stopped,
+            "FINISHED" => JobStatus::Finished,
             _ => bail!("Unknown job status"),
         };
         Ok(status)
@@ -45,7 +47,9 @@ pub struct TrackedJob {
     status: JobStatus,
     progress: f64,
     start_time: SystemTime,
-    stop_time: Option<SystemTime>,
+    completed_time: Option<SystemTime>,
+    stopped_time: Option<SystemTime>,
+    finished_time: Option<SystemTime>,
 }
 
 impl TrackedJob {
@@ -77,7 +81,9 @@ impl JobTracker {
             status: JobStatus::Pending,
             progress: 0.0,
             start_time: SystemTime::now(),
-            stop_time: None,
+            completed_time: None,
+            stopped_time: None,
+            finished_time: None,
         };
         self.jobs.insert(job_id, Arc::new(Mutex::new(tracked_job)));
     }
@@ -95,8 +101,17 @@ impl JobTracker {
         // TODO: Prevent transition between certain states e.g., from Completed to Running is invalid
         if let Some(tracked_job) = self.jobs.get(id) {
             let mut tracked_job = tracked_job.lock().unwrap();
-            if status == JobStatus::Completed {
-                tracked_job.stop_time = Some(SystemTime::now());
+            match status {
+                JobStatus::Completed => {
+                    tracked_job.completed_time = Some(SystemTime::now());
+                }
+                JobStatus::Stopped => {
+                    tracked_job.stopped_time = Some(SystemTime::now());
+                }
+                JobStatus::Finished => {
+                    tracked_job.finished_time = Some(SystemTime::now());
+                }
+                _ => {}
             }
             tracked_job.status = status;
             if let Some(progress) = progress {
@@ -111,11 +126,10 @@ impl JobTracker {
     pub fn get_completed_job_ids(&self) -> Vec<String> {
         self.jobs
             .iter()
-            .filter_map(|(_, tracked_job)| {
+            .filter_map(|(id, tracked_job)| {
                 tracked_job.lock().ok().and_then(|locked_job| {
                     if locked_job.status == JobStatus::Completed {
-                        let Job::Docker(docker_job) = &locked_job.job;
-                        Some(docker_job.id.clone())
+                        Some(id.clone())
                     } else {
                         None
                     }
@@ -145,9 +159,30 @@ impl JobTracker {
             .collect()
     }
 
-    /// Deletes a tracked job by ID
-    pub fn delete_tracked_job(&mut self, id: &str) {
-        self.jobs.remove(id);
+    /// Returns a `Vec<String>` containing the IDs of all stopped jobs which have been stopped
+    /// for longer than the `core.job_removal_timeout` setting.
+    pub fn get_stopped_and_expired_job_ids(&self) -> Vec<String> {
+        let now = SystemTime::now();
+        let stopped_job_cleanup_timeout = Duration::from_millis(SETTINGS.core.job_removal_timeout);
+
+        self.jobs
+            .iter()
+            .filter_map(|(id, tracked_job)| {
+                tracked_job.lock().ok().and_then(|locked_job| {
+                    if locked_job.status != JobStatus::Stopped {
+                        return None;
+                    }
+
+                    let elapsed_since_stopped =
+                        now.duration_since(locked_job.stopped_time.unwrap()).ok()?;
+                    if elapsed_since_stopped > stopped_job_cleanup_timeout {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect()
     }
 }
 
@@ -169,6 +204,9 @@ pub enum JobTrackerCommand {
         resp: JobTrackerCommandResponder<Vec<String>>,
     },
     GetCompletedJobIds {
+        resp: JobTrackerCommandResponder<Vec<String>>,
+    },
+    GetStoppedAndExpiredJobIds {
         resp: JobTrackerCommandResponder<Vec<String>>,
     },
 }
@@ -222,7 +260,10 @@ pub async fn get_timed_out_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec
         .await
         .expect("Failed sending GetTimedOutJobIds command");
 
-    resp_rx.await.expect("Failed to get job from channel").ok()
+    resp_rx
+        .await
+        .expect("Failed getting timed out jobs ids from from channel")
+        .ok()
 }
 
 pub async fn get_completed_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec<String>> {
@@ -231,7 +272,24 @@ pub async fn get_completed_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec
         .await
         .expect("Failed sending GetCompletedJobIds command");
 
-    resp_rx.await.expect("Failed to get job from channel").ok()
+    resp_rx
+        .await
+        .expect("Failed getting completed job ids from channel")
+        .ok()
+}
+
+pub async fn get_stopped_and_expired_job_ids(
+    tx: &Sender<JobTrackerCommand>,
+) -> Option<Vec<String>> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::GetStoppedAndExpiredJobIds { resp: resp_tx })
+        .await
+        .expect("Failed sending GetStoppedAndExpiredJobIds command");
+
+    resp_rx
+        .await
+        .expect("Failed to getting stopped jobs ids from channel")
+        .ok()
 }
 
 #[cfg(test)]

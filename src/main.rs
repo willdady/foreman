@@ -128,6 +128,11 @@ async fn main() -> Result<()> {
                         error!("Error stopping job: {}", e)
                     }
                 }
+                JobExecutorCommand::Remove { job_id } => {
+                    if let Err(e) = executor.remove(&job_id).await {
+                        error!("Error removing job: {}", e)
+                    }
+                }
             }
         }
     });
@@ -166,6 +171,11 @@ async fn main() -> Result<()> {
                         let timed_out_job_ids = job_tracker.get_timed_out_job_ids();
                         resp.send(Ok(timed_out_job_ids))
                             .expect("Failed to send timed out job ids response over channel");
+                    }
+                    JobTrackerCommand::GetStoppedAndExpiredJobIds { resp } => {
+                        let stopped_job_ids = job_tracker.get_stopped_and_expired_job_ids();
+                        resp.send(Ok(stopped_job_ids))
+                            .expect("Failed to send stopped job ids response over channel");
                     }
                 }
             }
@@ -208,7 +218,7 @@ async fn main() -> Result<()> {
                             job_id: job_id.clone(),
                         };
                         job_executor_tx3.send(command).await.expect(
-                            "Failed to send stop command to job executor for timed-out job",
+                            "Failed to send 'stop' command to job executor for timed-out job",
                         );
                         tracking::update_job_status(
                             &job_id,
@@ -218,6 +228,28 @@ async fn main() -> Result<()> {
                         )
                         .await
                         .expect("Failed to update job status to 'stopped' for timed-out job");
+                    }
+                }
+                // Send remove command to the job executor for any stopped and expired jobs
+                let stopped_job_ids =
+                    tracking::get_stopped_and_expired_job_ids(&job_tracker_tx3).await;
+                if let Some(stopped_job_ids) = stopped_job_ids {
+                    for job_id in stopped_job_ids {
+                        info!("Sending 'remove' command for stopped job: {}", job_id);
+                        let command = JobExecutorCommand::Remove {
+                            job_id: job_id.clone(),
+                        };
+                        job_executor_tx3.send(command).await.expect(
+                            "Failed to send 'remove' command to job executor for stopped job",
+                        );
+                        tracking::update_job_status(
+                            &job_id,
+                            JobStatus::Finished,
+                            None,
+                            &job_tracker_tx3,
+                        )
+                        .await
+                        .expect("Failed to update job status to 'finished' for stopped job");
                     }
                 }
                 // Sleep for a while before checking again

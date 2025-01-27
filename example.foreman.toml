@@ -23,6 +23,9 @@ hostname = "YOUR_HOSTNAME_HERE"
 # How long to wait for a job to report a 'completed' status before stopping the job
 # job_completion_timeout = 10000
 
+# How long to wait for before deleting a stopped job container
+# job_removal_timeout = 5000
+
 # Additional hosts to add to containers e.g. `extra_hosts = ["host.docker.internal:host-gateway"]`
 # extra_hosts = []
 
