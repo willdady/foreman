@@ -4,7 +4,13 @@ mod network;
 mod settings;
 mod tracking;
 
-use std::{sync::LazyLock, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, LazyLock,
+    },
+    time::Duration,
+};
 
 use anyhow::{Ok, Result};
 
@@ -42,8 +48,12 @@ async fn main() -> Result<()> {
     // Initialize the logger.
     simplelog::SimpleLogger::init(simplelog::LevelFilter::Info, simplelog::Config::default())?;
 
+    // Load settings
     let settings = &*SETTINGS;
-    println!("{:?}", settings);
+
+    // Thread-safe boolean which indicates whether we are running.
+    // This changes to false when a termination signal is received.
+    let running = Arc::new(AtomicBool::new(true));
 
     // Job executor channel
     let (job_executor_tx, mut job_executor_rx) = mpsc::channel::<JobExecutorCommand>(32);
@@ -52,6 +62,7 @@ async fn main() -> Result<()> {
     let (job_tracker_tx, mut job_tracker_rx) = mpsc::channel::<JobTrackerCommand>(32);
 
     // Control server poller
+    let running2 = running.clone();
     let job_tracker_tx2 = job_tracker_tx.clone();
     let job_executor_tx2 = job_executor_tx.clone();
     let control_server_poller_task = tokio::spawn(async move {
@@ -74,6 +85,11 @@ async fn main() -> Result<()> {
             .build()
             .unwrap();
         loop {
+            if !running2.load(Ordering::SeqCst) {
+                info!("Stopping poller task");
+                break;
+            }
+
             let job_result: anyhow::Result<Job> = async {
                 let job = http_client
                     .get(&settings.core.url)
@@ -162,6 +178,16 @@ async fn main() -> Result<()> {
                         resp.send(result)
                             .expect("Failed to send update status response over channel");
                     }
+                    JobTrackerCommand::GetRunningJobIds { resp } => {
+                        let running_job_ids = job_tracker.get_running_job_ids();
+                        resp.send(Ok(running_job_ids))
+                            .expect("Failed to send running job ids response over channel");
+                    }
+                    JobTrackerCommand::GetStoppedJobIds { resp } => {
+                        let stopped_job_ids = job_tracker.get_stopped_job_ids();
+                        resp.send(Ok(stopped_job_ids))
+                            .expect("Failed to send stopped job ids response over channel");
+                    }
                     JobTrackerCommand::GetCompletedJobIds { resp } => {
                         let completed_job_ids = job_tracker.get_completed_job_ids();
                         resp.send(Ok(completed_job_ids))
@@ -183,6 +209,7 @@ async fn main() -> Result<()> {
     });
 
     // Job lifecycle task coordinates between job tracker and job executor
+    let running3 = running.clone();
     let job_tracker_tx3 = job_tracker_tx.clone();
     let job_executor_tx3 = job_executor_tx.clone();
     let job_lifecycle_task =
@@ -252,8 +279,63 @@ async fn main() -> Result<()> {
                         .expect("Failed to update job status to 'finished' for stopped job");
                     }
                 }
+
+                if !running3.load(Ordering::SeqCst) {
+                    // Stop any running jobs
+                    let running_job_ids = tracking::get_running_job_ids(&job_tracker_tx3)
+                        .await
+                        .unwrap_or_default();
+                    let running_job_ids_length = running_job_ids.len();
+                    for job_id in running_job_ids {
+                        info!("Sending 'Stop' command for running job: {}", job_id);
+                        let command = JobExecutorCommand::Stop {
+                            job_id: job_id.clone(),
+                        };
+                        job_executor_tx3.send(command).await.expect(
+                            "Failed to send 'stop' command to job executor for timed-out job",
+                        );
+                        tracking::update_job_status(
+                            &job_id,
+                            JobStatus::Stopped,
+                            None,
+                            &job_tracker_tx3,
+                        )
+                        .await
+                        .expect("Failed to update job status to 'stopped' for running job");
+                    }
+                    // Remove any stopped jobs
+                    let stopped_job_ids = tracking::get_stopped_job_ids(&job_tracker_tx3)
+                        .await
+                        .unwrap_or_default();
+                    let stopped_job_ids_length = stopped_job_ids.len();
+                    for job_id in stopped_job_ids {
+                        info!("Sending 'remove' command for stopped job: {}", job_id);
+                        let command = JobExecutorCommand::Remove {
+                            job_id: job_id.clone(),
+                        };
+                        job_executor_tx3.send(command).await.expect(
+                            "Failed to send 'remove' command to job executor for stopped job",
+                        );
+                        tracking::update_job_status(
+                            &job_id,
+                            JobStatus::Finished,
+                            None,
+                            &job_tracker_tx3,
+                        )
+                        .await
+                        .expect("Failed to update job status to 'finished' for stopped job");
+                    }
+
+                    if running_job_ids_length == 0 && stopped_job_ids_length == 0 {
+                        info!("Stopping lifecycle task");
+                        break;
+                    } else {
+                        continue;
+                    }
+                }
+
                 // Sleep for a while before checking again
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
         });
 
@@ -271,7 +353,7 @@ async fn main() -> Result<()> {
                 let tracked_job = {
                     let tracked_job = job_opt.unwrap();
                     let tracked_job = tracked_job.lock().unwrap();
-                    tracked_job.clone() // I don't love the clone here :(
+                    tracked_job.clone() // FIXME: I don't love the clone here :(
                 };
                 let Job::Docker(docker_job) = tracked_job.inner();
 
@@ -388,6 +470,16 @@ async fn main() -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", settings.core.port)).await?;
     let server = axum::serve(listener, app);
+
+    // Set up a Ctrl-C handler to gracefully shut down
+    let running4 = running.clone();
+    ctrlc::set_handler(move || {
+        println!("Termination signal received, shutting down...");
+        running4.store(false, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_secs(3));
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
 
     let _ = join!(
         control_server_poller_task,

@@ -122,13 +122,13 @@ impl JobTracker {
         bail!("Invalid job id");
     }
 
-    /// Returns a `Vec<String>` containing the IDs of all completed jobs.
-    pub fn get_completed_job_ids(&self) -> Vec<String> {
+    /// Returns a `Vec<String>` containing the IDs of jobs matching status
+    fn get_job_ids_by_status(&self, job_status: JobStatus) -> Vec<String> {
         self.jobs
             .iter()
             .filter_map(|(id, tracked_job)| {
                 tracked_job.lock().ok().and_then(|locked_job| {
-                    if locked_job.status == JobStatus::Completed {
+                    if locked_job.status == job_status {
                         Some(id.clone())
                     } else {
                         None
@@ -136,6 +136,21 @@ impl JobTracker {
                 })
             })
             .collect()
+    }
+
+    /// Returns a `Vec<String>` containing the IDs of all completed jobs.
+    pub fn get_completed_job_ids(&self) -> Vec<String> {
+        self.get_job_ids_by_status(JobStatus::Completed)
+    }
+
+    /// Returns a `Vec<String>` containing the IDs of all running jobs.
+    pub fn get_running_job_ids(&self) -> Vec<String> {
+        self.get_job_ids_by_status(JobStatus::Running)
+    }
+
+    /// Returns a `Vec<String>` containing the IDs of all stopped jobs.
+    pub fn get_stopped_job_ids(&self) -> Vec<String> {
+        self.get_job_ids_by_status(JobStatus::Stopped)
     }
 
     /// Returns a `Vec<String>` containing the IDs of any running jobs which have timed out.
@@ -200,6 +215,12 @@ pub enum JobTrackerCommand {
         progress: Option<f64>,
         resp: JobTrackerCommandResponder<()>,
     },
+    GetRunningJobIds {
+        resp: JobTrackerCommandResponder<Vec<String>>,
+    },
+    GetStoppedJobIds {
+        resp: JobTrackerCommandResponder<Vec<String>>,
+    },
     GetTimedOutJobIds {
         resp: JobTrackerCommandResponder<Vec<String>>,
     },
@@ -263,6 +284,30 @@ pub async fn get_timed_out_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec
     resp_rx
         .await
         .expect("Failed getting timed out jobs ids from from channel")
+        .ok()
+}
+
+pub async fn get_running_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec<String>> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::GetRunningJobIds { resp: resp_tx })
+        .await
+        .expect("Failed sending GetRunningJobIds command");
+
+    resp_rx
+        .await
+        .expect("Failed getting running job ids from channel")
+        .ok()
+}
+
+pub async fn get_stopped_job_ids(tx: &Sender<JobTrackerCommand>) -> Option<Vec<String>> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::GetStoppedJobIds { resp: resp_tx })
+        .await
+        .expect("Failed sending GetStoppedJobIds command");
+
+    resp_rx
+        .await
+        .expect("Failed getting stopped job ids from channel")
         .ok()
 }
 
