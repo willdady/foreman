@@ -303,27 +303,30 @@ async fn main() -> Result<()> {
                         .await
                         .expect("Failed to update job status to 'stopped' for running job");
                     }
-                    // Remove any stopped jobs
-                    let stopped_job_ids = tracking::get_stopped_job_ids(&job_tracker_tx3)
-                        .await
-                        .unwrap_or_default();
-                    let stopped_job_ids_length = stopped_job_ids.len();
-                    for job_id in stopped_job_ids {
-                        info!("Sending 'remove' command for stopped job: {}", job_id);
-                        let command = JobExecutorCommand::Remove {
-                            job_id: job_id.clone(),
-                        };
-                        job_executor_tx3.send(command).await.expect(
-                            "Failed to send 'remove' command to job executor for stopped job",
-                        );
-                        tracking::update_job_status(
-                            &job_id,
-                            JobStatus::Finished,
-                            None,
-                            &job_tracker_tx3,
-                        )
-                        .await
-                        .expect("Failed to update job status to 'finished' for stopped job");
+                    // Remove any stopped jobs (if allowed by settings)
+                    let mut stopped_job_ids_length: usize = 0;
+                    if settings.core.remove_stopped_containers_on_terminate {
+                        let stopped_job_ids = tracking::get_stopped_job_ids(&job_tracker_tx3)
+                            .await
+                            .unwrap_or_default();
+                        stopped_job_ids_length = stopped_job_ids.len();
+                        for job_id in stopped_job_ids {
+                            info!("Sending 'remove' command for stopped job: {}", job_id);
+                            let command = JobExecutorCommand::Remove {
+                                job_id: job_id.clone(),
+                            };
+                            job_executor_tx3.send(command).await.expect(
+                                "Failed to send 'remove' command to job executor for stopped job",
+                            );
+                            tracking::update_job_status(
+                                &job_id,
+                                JobStatus::Finished,
+                                None,
+                                &job_tracker_tx3,
+                            )
+                            .await
+                            .expect("Failed to update job status to 'finished' for stopped job");
+                        }
                     }
 
                     if running_job_ids_length == 0 && stopped_job_ids_length == 0 {

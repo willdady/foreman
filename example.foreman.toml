@@ -26,6 +26,9 @@ hostname = "YOUR_HOSTNAME_HERE"
 # How long to wait for before deleting a stopped job container
 # job_removal_timeout = 5000
 
+# Whether to remove stopped containers on termination of foreman
+# remove_stopped_containers_on_terminate = true
+
 # Additional hosts to add to containers e.g. `extra_hosts = ["host.docker.internal:host-gateway"]`
 # extra_hosts = []
 
