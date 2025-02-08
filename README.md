@@ -220,6 +220,8 @@ To run the server, `cd` into the `examples/control_server` directory and run:
 deno run -A index.ts
 ```
 
+The server runs on port `8888` and listens for `GET` requests on the `/job` endpoint.
+
 ### 3. Configure foreman
 
 Update your `foreman.toml` file to contain the following configuration.
