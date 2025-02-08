@@ -90,29 +90,49 @@ async fn main() -> Result<()> {
                 break;
             }
 
-            let job_result: anyhow::Result<Job> = async {
-                let job = http_client
+            // If we've reached our maximum concurrent jobs, sleep before polling again
+            let running_jobs_count = tracking::count_running_jobs(&job_tracker_tx2)
+                .await
+                .unwrap_or_default();
+            if running_jobs_count as u64 > settings.core.max_concurrent_jobs {
+                info!(
+                    "Reached maximum concurrent jobs ({}), waiting a bit before polling again",
+                    settings.core.max_concurrent_jobs
+                );
+                tokio::time::sleep(tokio::time::Duration::from_millis(
+                    settings.core.poll_frequency.into(),
+                ))
+                .await;
+                continue;
+            }
+
+            // Poll control server for jobs
+            let jobs_result: anyhow::Result<Vec<Job>> = async {
+                let jobs = http_client
                     .get(&settings.core.url)
                     .header("Authorization", format!("Bearer {}", settings.core.token))
                     .send()
                     .await?
-                    .json::<Job>()
+                    .json::<Vec<Job>>()
                     .await?;
-                Ok(job)
+                Ok(jobs)
             }
             .await;
 
-            match job_result {
-                anyhow::Result::Ok(job) => {
-                    job_tracker_tx2
-                        .send(JobTrackerCommand::Insert { job: job.clone() })
-                        .await
-                        .expect("Failed to send job to tracker channel");
+            match jobs_result {
+                anyhow::Result::Ok(jobs) => {
+                    for job in jobs {
+                        info!("Got job: {:?}", job);
+                        job_tracker_tx2
+                            .send(JobTrackerCommand::Insert { job: job.clone() })
+                            .await
+                            .expect("Failed to send job to tracker channel");
 
-                    job_executor_tx2
-                        .send(JobExecutorCommand::Execute { job })
-                        .await
-                        .expect("Failed to send job to executor channel");
+                        job_executor_tx2
+                            .send(JobExecutorCommand::Execute { job })
+                            .await
+                            .expect("Failed to send job to executor channel");
+                    }
                 }
                 anyhow::Result::Err(e) => {
                     error!("Error fetching job from control server: {}", e)
@@ -202,6 +222,11 @@ async fn main() -> Result<()> {
                         let stopped_job_ids = job_tracker.get_stopped_and_expired_job_ids();
                         resp.send(Ok(stopped_job_ids))
                             .expect("Failed to send stopped job ids response over channel");
+                    }
+                    JobTrackerCommand::CountRunningJobs { resp } => {
+                        let count = job_tracker.count_running_jobs();
+                        resp.send(Ok(count))
+                            .expect("Failed to send running job count response over channel");
                     }
                 }
             }

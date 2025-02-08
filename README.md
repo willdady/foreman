@@ -75,7 +75,7 @@ Foreman is similar in spirit to a CI/CD agent but more generic.
 
 At a high level, a control server is a responsible for the following:
 
-- Serves jobs to foreman agents
+- Responds to requests from foreman agents returning zero-or-more jobs in response to a request
 - Retrieves job execution statuses from foreman agents
 
 The implementation of a control server is not within the scope of this project, though a reference implementation is included for development purposes.

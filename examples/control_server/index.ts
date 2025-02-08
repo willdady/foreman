@@ -47,6 +47,13 @@ const parseLabelsHeader = (
   return result;
 };
 
+// Returns a random integer between min (inclusive) and max (inclusive).
+const getRandomInt = (min: number, max: number): number => {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
 const router = new Router();
 
 router.get("/job", (ctx) => {
@@ -68,10 +75,14 @@ router.get("/job", (ctx) => {
   );
   console.log("Got token:", token);
 
-  // Return a job, assigning it to the requesting foreman agent.
-  // In a concrete implementation, you would mark the job as in-progress before returning it.
+  // Return an array of zero-or-more jobs, assigning them to the requesting foreman agent.
+  // In a concrete implementation, you would mark each job as in-progress before returning them.
   // Never return a job that is already in-progress.
-  ctx.response.body = jobFactory();
+  const jobs = [];
+  for (let i = 0; i < getRandomInt(0, 5); i++) {
+    jobs.push(jobFactory());
+  }
+  ctx.response.body = jobs;
 });
 
 router.put("/job/:jobId", (ctx) => {
