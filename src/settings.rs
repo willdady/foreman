@@ -51,6 +51,7 @@ pub struct Core {
     pub job_completion_timeout: u64,
     pub job_removal_timeout: u64,
     pub remove_stopped_containers_on_terminate: bool,
+    pub max_concurrent_jobs: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,6 +104,7 @@ impl Settings {
             .set_default("core.job_completion_timeout", 10_000)?
             .set_default("core.job_removal_timeout", 5_000)?
             .set_default("core.remove_stopped_containers_on_terminate", true)?
+            .set_default("core.max_concurrent_jobs", 12)?
             .set_default("docker.start_port", 49152)?
             .set_default("docker.end_port", 65535)?
             .add_source(File::with_name(&config_path_string).required(false))

@@ -1,6 +1,7 @@
 # This is an example foreman config file.
 # All fields are optional unless marked REQUIRED.
-# Copy this file before making changes `cp example.foreman.toml foreman.toml`
+# Copy this file before making changes `cp example.foreman.toml foreman.toml`.
+# Values denoting a duration are always in milliseconds.
 
 [core]
 # URL of the control server - REQUIRED
@@ -11,7 +12,7 @@ url = "http://localhost:8888/job"
 # - REQUIRED
 token = "YOUR_TOKEN_HERE"
 
-# Hostname containers will use to access the agent's API - REQUIRED
+# Hostname containers will use to access the foreman agent's REST API - REQUIRED
 hostname = "YOUR_HOSTNAME_HERE"
 
 # Port on which to expose foreman
@@ -23,7 +24,7 @@ hostname = "YOUR_HOSTNAME_HERE"
 # How long to wait for a job to report a 'completed' status before stopping the job
 # job_completion_timeout = 10000
 
-# How long to wait for before deleting a stopped job container
+# How long to wait before deleting a stopped job container
 # job_removal_timeout = 5000
 
 # Whether to remove stopped containers on termination of foreman
@@ -37,6 +38,9 @@ hostname = "YOUR_HOSTNAME_HERE"
 
 # How long to wait for a response from the control server
 # poll_timeout = 30000
+
+# The maximum number of concurrent jobs to run
+# max_concurrent_jobs = 12
 
 # Labels to send in the `x-foreman-labels` HTTP header in requests sent to the control server (`core.url` above).
 # These key/value pairs will be formatted `key1=value,key2=value`.

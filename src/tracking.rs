@@ -138,6 +138,22 @@ impl JobTracker {
             .collect()
     }
 
+    /// Count jobs matching status
+    pub fn count_jobs_by_status(&self, job_status: JobStatus) -> usize {
+        self.jobs
+            .iter()
+            .filter_map(|(_, tracked_job)| {
+                tracked_job.lock().ok().and_then(|locked_job| {
+                    if locked_job.status == job_status {
+                        Some(())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .count()
+    }
+
     /// Returns a `Vec<String>` containing the IDs of all completed jobs.
     pub fn get_completed_job_ids(&self) -> Vec<String> {
         self.get_job_ids_by_status(JobStatus::Completed)
@@ -199,6 +215,11 @@ impl JobTracker {
             })
             .collect()
     }
+
+    /// Count running jobs
+    pub fn count_running_jobs(&self) -> usize {
+        self.count_jobs_by_status(JobStatus::Running)
+    }
 }
 
 pub enum JobTrackerCommand {
@@ -229,6 +250,9 @@ pub enum JobTrackerCommand {
     },
     GetStoppedAndExpiredJobIds {
         resp: JobTrackerCommandResponder<Vec<String>>,
+    },
+    CountRunningJobs {
+        resp: JobTrackerCommandResponder<usize>,
     },
 }
 
@@ -313,6 +337,16 @@ pub async fn get_stopped_and_expired_job_ids(
         resp,
     })
     .await
+}
+
+pub async fn count_running_jobs(tx: &Sender<JobTrackerCommand>) -> Result<usize> {
+    let (resp_tx, resp_rx) = oneshot::channel();
+    tx.send(JobTrackerCommand::CountRunningJobs { resp: resp_tx })
+        .await
+        .expect("Failed sending count running jobs command");
+    resp_rx
+        .await
+        .expect("Failed getting count running jobs response")
 }
 
 #[cfg(test)]
