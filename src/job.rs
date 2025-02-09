@@ -8,11 +8,11 @@ use crate::env::EnvVars;
 pub struct DockerJob {
     pub id: String,
     pub image: String,
-    pub port: u16,
     pub command: Option<Vec<String>>,
     pub body: Value,
     pub env: Option<EnvVars>,
     pub callback_url: String,
+    #[serde(default)]
     pub always_pull: bool,
 }
 
@@ -35,7 +35,6 @@ mod tests {
         let json = r#"{
             "id": "123abc",
             "image": "alpine:latest",
-            "port": 8080,
             "command": ["echo", "Hello world!"],
             "body": {
                 "foo": "bar",
@@ -54,7 +53,6 @@ mod tests {
             Job::Docker(DockerJob {
                 id,
                 image,
-                port,
                 command,
                 body,
                 env,
@@ -68,7 +66,6 @@ mod tests {
 
                 assert_eq!(id, "123abc");
                 assert_eq!(image, "alpine:latest");
-                assert_eq!(port, 8080);
                 assert_eq!(
                     command,
                     Some(vec!["echo".to_string(), "Hello world!".to_string()])

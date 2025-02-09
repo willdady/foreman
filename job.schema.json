@@ -10,10 +10,6 @@
             "type": "string",
             "description": "Docker image to use for the job"
         },
-        "port": {
-            "type": "integer",
-            "description": "Port to expose on the container"
-        },
         "command": {
             "type": "array",
             "items": {
@@ -38,9 +34,10 @@
         },
         "alwaysPull": {
             "type": "boolean",
-            "description": "Whether to always pull the Docker image before creating a container"
+            "description": "Whether to always pull the Docker image before creating a container",
+            "default": false
         }
     },
-    "required": ["id", "image", "port", "body", "callbackUrl", "alwaysPull"],
+    "required": ["id", "image", "body", "callbackUrl"],
     "additionalProperties": false
 }

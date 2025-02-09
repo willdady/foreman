@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::{
     env::EnvVars,
     job::{DockerJob, Job},
-    network::PortManager,
     settings::SETTINGS,
 };
 use futures::{future, stream::StreamExt};
@@ -16,26 +15,20 @@ use bollard::{
     container::{Config, CreateContainerOptions, StartContainerOptions, StopContainerOptions},
     image::{CreateImageOptions, ListImagesOptions},
     network::CreateNetworkOptions,
-    secret::{ContainerCreateResponse, ContainerInspectResponse, PortBinding},
+    secret::{ContainerCreateResponse, ContainerInspectResponse},
     Docker,
 };
 
 #[derive(Debug)]
 pub struct DockerExecutor {
     docker: Docker,
-    port_manager: PortManager,
 }
 
 impl DockerExecutor {
     pub async fn new() -> Result<Self> {
         let docker = Docker::connect_with_local_defaults()?;
 
-        let port_manager = PortManager::new(None, None)?;
-
-        let _self = DockerExecutor {
-            docker,
-            port_manager,
-        };
+        let _self = DockerExecutor { docker };
         _self.create_network().await?;
         Ok(_self)
     }
@@ -87,8 +80,6 @@ impl DockerExecutor {
         id: &str,
         container_name: &str,
         image: &str,
-        port: u16,
-        host_port: u16,
         command: Option<&Vec<String>>,
         env: Option<EnvVars>,
     ) -> Result<ContainerCreateResponse> {
@@ -98,23 +89,6 @@ impl DockerExecutor {
             name: container_name,
             platform: None,
         });
-
-        // FIXME: Port bindings should be configurable i.e. not needed if this program is also running inside Docker
-        // Create port bindings
-        let mut port_bindings = HashMap::new();
-        port_bindings.insert(
-            format!("{}/tcp", port),
-            Some(vec![PortBinding {
-                host_ip: Some("0.0.0.0".to_string()),
-                host_port: Some(host_port.to_string()),
-            }]),
-        );
-
-        // Create exposed ports
-        let _port = format!("{}/tcp", port);
-        let empty_object: HashMap<(), ()> = HashMap::new();
-        let mut exposed_ports = HashMap::new();
-        exposed_ports.insert(_port.as_str(), empty_object);
 
         // Merge the default agent environment variables with the job's environment variables
         let mut resolved_env = env.unwrap_or_default();
@@ -144,9 +118,7 @@ impl DockerExecutor {
         let config = Config {
             image: Some(image),
             cmd,
-            exposed_ports: Some(exposed_ports),
             host_config: Some(bollard::service::HostConfig {
-                port_bindings: Some(port_bindings),
                 network_mode: Some(SETTINGS.core.network_name.clone()),
                 extra_hosts,
                 ..Default::default()
@@ -206,7 +178,6 @@ impl DockerExecutor {
             id,
             image,
             always_pull,
-            port,
             env,
             command,
             ..
@@ -226,17 +197,8 @@ impl DockerExecutor {
             }
         }
         // Create container
-        let host_port = self.port_manager.reserve_port()?;
-        self.create_container(
-            id,
-            &container_name,
-            image,
-            *port,
-            host_port,
-            command.as_ref(),
-            env.clone(),
-        )
-        .await?;
+        self.create_container(id, &container_name, image, command.as_ref(), env.clone())
+            .await?;
         // Start container
         self.start_container(&container_name).await?;
         Ok(())

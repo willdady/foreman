@@ -54,9 +54,3 @@ hostname = "YOUR_HOSTNAME_HERE"
 [docker]
 # Docker deamon endpoint
 # url = 'unix:///var/run/docker.sock'
-
-# Start port for container mapping
-# start_port = 49152
-
-# End port for container mapping
-# end_port = 65535

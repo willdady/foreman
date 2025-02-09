@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::{env, path::Path};
 
-use config::{
-    Config, ConfigError, Environment, File, FileFormat, FileSourceFile, FileSourceString,
-};
+use config::{Config, ConfigError, Environment, File, FileFormat, FileSourceFile};
 use serde::Deserialize;
 use urlencoding::encode;
 
@@ -99,8 +97,6 @@ pub struct Core {
 #[allow(unused)]
 pub struct Docker {
     pub url: Option<String>,
-    pub start_port: u16,
-    pub end_port: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,9 +117,7 @@ impl Settings {
             .set_default("core.job_completion_timeout", 10_000)?
             .set_default("core.job_removal_timeout", 5_000)?
             .set_default("core.remove_stopped_containers_on_terminate", true)?
-            .set_default("core.max_concurrent_jobs", 12)?
-            .set_default("docker.start_port", 49152)?
-            .set_default("docker.end_port", 65535)?;
+            .set_default("core.max_concurrent_jobs", 12)?;
 
         // Resolve the path to our `foreman.toml` config file (if it exists) and add it
         // to the config builder.

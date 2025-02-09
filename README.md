@@ -67,8 +67,8 @@ The order of the key/values is NOT guaranteed.
 
 ### Foreman
 
-Foreman (this project) is a self-hostable Rust-based agent which retrieves jobs from a control server and executes them inside a containerised environment.
-It is intentionally designed to be run in private subnets behind a NAT gateway, without the need to be exposed to the internet directly.
+Foreman (this project) is a Rust-based job scheduling agent which retrieves jobs from a control server and executes them inside a containerised environment.
+It is designed to be run in private subnets behind a NAT gateway, without the need to be exposed to the internet.
 
 Foreman is similar in spirit to a CI/CD agent but more generic.
 
@@ -136,11 +136,6 @@ interface Job {
     image: string;
 
     /**
-     * Port to expose on the container
-     */
-    port: number;
-
-    /**
      * Command to run in the container
      */
     command?: string[];
@@ -163,7 +158,7 @@ interface Job {
     /**
      * Whether to always pull the Docker image before creating a container
      */
-    alwaysPull: boolean;
+    alwaysPull?: boolean;
 }
 ```
 
