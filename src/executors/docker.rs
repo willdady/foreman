@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    job::{DockerJob, EnvVars, Job},
+    env::EnvVars,
+    job::{DockerJob, Job},
     network::PortManager,
     settings::SETTINGS,
 };
@@ -115,8 +116,14 @@ impl DockerExecutor {
         let mut exposed_ports = HashMap::new();
         exposed_ports.insert(_port.as_str(), empty_object);
 
+        // Merge the default agent environment variables with the job's environment variables
+        let mut resolved_env = env.unwrap_or_default();
+        if let Some(default_env) = SETTINGS.core.env.as_ref() {
+            resolved_env = resolved_env.merge_clone(default_env);
+        }
+
         // Convert env from HashMap to Vec<&str>
-        let mut env_strings: Vec<String> = env.unwrap_or_default().into();
+        let mut env_strings: Vec<String> = resolved_env.into();
         env_strings.push(format!(
             "FOREMAN_GET_JOB_ENDPOINT=http://{}:{}/job/{}",
             SETTINGS.core.hostname, SETTINGS.core.port, id

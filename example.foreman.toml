@@ -42,11 +42,14 @@ hostname = "YOUR_HOSTNAME_HERE"
 # The maximum number of concurrent jobs to run
 # max_concurrent_jobs = 12
 
+# Default environment variables to set in every container created by foreman.
+# These will override matching variables set in a job definition.
+[core.env]
+
 # Labels to send in the `x-foreman-labels` HTTP header in requests sent to the control server (`core.url` above).
 # These key/value pairs will be formatted `key1=value,key2=value`.
 # The order of the resulting header value is NOT guaranteed.
-# [core.labels]
-# foo = "bar"
+[core.labels]
 
 [docker]
 # Docker deamon endpoint

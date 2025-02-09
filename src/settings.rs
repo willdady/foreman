@@ -6,6 +6,8 @@ use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 use urlencoding::encode;
 
+use crate::env::EnvVars;
+
 const CONFIG_FILE_NAME: &str = "foreman.toml";
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +54,7 @@ pub struct Core {
     pub job_removal_timeout: u64,
     pub remove_stopped_containers_on_terminate: bool,
     pub max_concurrent_jobs: u64,
+    pub env: Option<EnvVars>,
 }
 
 #[derive(Debug, Deserialize)]

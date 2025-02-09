@@ -1,35 +1,7 @@
-use std::collections::HashMap;
-
 use serde::Deserialize;
 use serde_json::Value;
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
-pub struct EnvVars(HashMap<String, String>);
-
-impl EnvVars {
-    pub fn new() -> Self {
-        EnvVars(HashMap::new())
-    }
-
-    pub fn inner(&self) -> &HashMap<String, String> {
-        &self.0
-    }
-
-    pub fn inner_mut(&mut self) -> &mut HashMap<String, String> {
-        &mut self.0
-    }
-}
-
-impl From<EnvVars> for Vec<String> {
-    /// Convert EnvVars to Vec<String> where each string is formatted as "Key=Value"
-    fn from(env_vars: EnvVars) -> Self {
-        env_vars
-            .inner()
-            .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect()
-    }
-}
+use crate::env::EnvVars;
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
