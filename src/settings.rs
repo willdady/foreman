@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::{env, path::Path};
 
-use config::{Config, ConfigError, Environment, File};
+use config::{
+    Config, ConfigError, Environment, File, FileFormat, FileSourceFile, FileSourceString,
+};
 use serde::Deserialize;
 use urlencoding::encode;
 
 use crate::env::EnvVars;
-
-const CONFIG_FILE_NAME: &str = "foreman.toml";
 
 #[derive(Debug, Deserialize)]
 pub struct LabelMap(HashMap<String, String>);
@@ -36,6 +36,44 @@ impl Default for LabelMap {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Resolves the configuration file by checking the following locations in order:
+///
+/// 1. The path specified by the `FOREMAN_CONFIG` environment variable
+/// 2. ./foreman.toml
+/// 3. /etc/foreman/foreman.toml
+/// 4. $HOME/.foreman/foreman.toml
+fn get_config_file() -> Option<File<FileSourceFile, FileFormat>> {
+    // If FOREMAN_CONFIG environment variable is set and it points to a valid file, use that.
+    // Otherwise panic!
+    if let Ok(val) = env::var("FOREMAN_CONFIG") {
+        if Path::new(&val).exists() {
+            return Some(File::with_name(&val));
+        } else {
+            panic!("File path defined in FOREMAN_CONFIG environment variable does not exist");
+        }
+    }
+
+    // If file exists in current directory, use that.
+    if Path::new("foreman.toml").exists() {
+        return Some(File::with_name("foreman.toml"));
+    }
+
+    // If file exists at path /etc/foreman/foreman.toml, use that.
+    if Path::new("/etc/foreman/foreman.toml").exists() {
+        return Some(File::with_name("/etc/foreman/foreman.toml"));
+    }
+
+    // If file exists at path ~/.foreman/foreman.toml, use that.
+    if let Some(home_dir) = dirs::home_dir() {
+        let p = &home_dir.join(".foreman/foreman.toml");
+        if Path::new(p).exists() {
+            return Some(File::with_name(p.to_string_lossy().to_string().as_str()));
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,32 +112,8 @@ pub struct Settings {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let path_exists =
-            |path: Option<String>| path.filter(|_path| Path::new(_path.as_str()).exists());
-
-        let config_path_string = if let Ok(val) = env::var("FOREMAN_CONFIG") {
-            path_exists(Some(val)).unwrap_or_else(|| {
-                eprintln!(
-                    "ERROR: File path defined in FOREMAN_CONFIG environment variable does not exist"
-                );
-                std::process::exit(1);
-            })
-        } else {
-            path_exists(Some(CONFIG_FILE_NAME.to_string()))
-                .or_else(|| {
-                    let home_dir = dirs::home_dir().expect("Failed to get home directory");
-                    let home_config_file_path = home_dir.join(".foreman").join(CONFIG_FILE_NAME);
-                    let home_config_file_path_string =
-                        format!("{}", home_config_file_path.display());
-                    path_exists(Some(home_config_file_path_string))
-                })
-                .unwrap_or_else(|| {
-                    eprintln!("ERROR: Unable to find {}", CONFIG_FILE_NAME);
-                    std::process::exit(1);
-                })
-        };
-
-        let s = Config::builder()
+        // Create config builder and set defaults
+        let mut config_builder = Config::builder()
             .set_default("core.poll_frequency", 5_000)?
             .set_default("core.poll_timeout", 30_000)?
             .set_default("core.port", 3000)?
@@ -109,8 +123,16 @@ impl Settings {
             .set_default("core.remove_stopped_containers_on_terminate", true)?
             .set_default("core.max_concurrent_jobs", 12)?
             .set_default("docker.start_port", 49152)?
-            .set_default("docker.end_port", 65535)?
-            .add_source(File::with_name(&config_path_string).required(false))
+            .set_default("docker.end_port", 65535)?;
+
+        // Resolve the path to our `foreman.toml` config file (if it exists) and add it
+        // to the config builder.
+        if let Some(config_file) = get_config_file() {
+            config_builder = config_builder.add_source(config_file.required(false));
+        }
+
+        let config = config_builder
+            // Add environment variables source to the config builder
             .add_source(
                 Environment::with_prefix("foreman")
                     .prefix_separator("_")
@@ -118,9 +140,10 @@ impl Settings {
             )
             .build()?;
 
-        s.try_deserialize()
+        // Deserialize the config into our Settings struct
+        config.try_deserialize()
     }
 }
 
 pub static SETTINGS: LazyLock<Settings> =
-    LazyLock::new(|| Settings::new().expect("Failed to load settings"));
+    LazyLock::new(|| Settings::new().expect("Failed to load foreman settings"));

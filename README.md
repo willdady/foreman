@@ -26,9 +26,10 @@ cargo build --release
 
 The foreman binary expects to find a configuration file named `foreman.toml` in one of the following locations:
 
-- The current working directory
-- `$HOME/.foreman/foreman.toml`
 - At a path specified by the `FOREMAN_CONFIG` environment variable. e.g. `FOREMAN_CONFIG=/path/to/foreman.toml`
+- The current working directory
+- `/etc/foreman/foreman.toml`
+- `$HOME/.foreman/foreman.toml`
 
 Refer to [example.foreman.toml](example.foreman.toml) for an explanation of the various configuration options and their defaults.
 
