@@ -6,6 +6,7 @@ on:
       - v*
 
 env:
+  GH_TOKEN: ${{ github.token }}
   CARGO_TERM_COLOR: always
 
 jobs:
