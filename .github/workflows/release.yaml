@@ -19,4 +19,4 @@ jobs:
       run: cargo test --verbose
     - name: Create release
       run: |
-        gh release create --generate-notes ${{ GITHUB_REF_NAME }} target/release/foreman
+        gh release create --generate-notes ${{ env.GITHUB_REF_NAME }} target/release/foreman
