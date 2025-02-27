@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --release --verbose
     - name: Run tests
       run: cargo test --verbose
     - name: Create release
@@ -25,4 +25,4 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "Creating release for ${{ github.ref_name }}"
-        gh release create --generate-notes ${{ github.ref_name }} target/release/foreman
+        gh release create ${{ github.ref_name }} target/release/foreman --generate-notes
