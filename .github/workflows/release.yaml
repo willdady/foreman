@@ -24,5 +24,5 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        echo "Creating release for ${{ env.GITHUB_REF_NAME }}"
-        gh release create --generate-notes ${{ env.GITHUB_REF_NAME }} target/release/foreman
+        echo "Creating release for ${{ github.ref_name }}"
+        gh release create --generate-notes ${{ github.ref_name }} target/release/foreman
